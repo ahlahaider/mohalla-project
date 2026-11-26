@@ -43,3 +43,15 @@ test('register rejects a bad phone number before touching the database', async (
   });
   assert.equal(res.status, 400);
 });
+
+test('phone check and code request reject a bad number before touching the database', async () => {
+  for (const path of ['/auth/phone', '/auth/otp/request']) {
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '12345', channel: 'sms' }),
+    });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, 'bad_phone');
+  }
+});

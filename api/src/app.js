@@ -45,5 +45,5 @@ app.use((err, req, res, next) => {
   }
   if (err.code === 11000) return res.status(409).json({ error: 'That already exists' });
   if (!err.status) console.error(err); // unexpected: log it for us
-  res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  res.status(err.status || 500).json(err.status ? { error: err.message, ...err.extra } : { error: 'Something went wrong' });
 });

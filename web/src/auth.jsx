@@ -1,7 +1,7 @@
 // Keeps track of who is logged in and shares it with every page through
 // React context, so any component can call useAuth() to get the user.
 import { createContext, useContext, useEffect, useState } from 'react';
-import { api } from './api.js';
+import { api, getToken, setToken } from './api.js';
 
 const AuthContext = createContext(null);
 
@@ -11,26 +11,36 @@ export function AuthProvider({ children }) {
 
   // On page load, if a token is saved, ask the API who it belongs to.
   useEffect(() => {
-    if (!localStorage.getItem('token')) return setLoading(false);
+    if (!getToken()) return setLoading(false);
     api('/auth/me')
       .then((d) => setUser(d.user))
-      .catch(() => localStorage.removeItem('token'))
+      .catch(() => setToken(null))
       .finally(() => setLoading(false));
   }, []);
 
-  const finish = ({ token, user }) => {
-    localStorage.setItem('token', token);
-    setUser(user);
-    return user;
+  // Every successful login/sign-up answer looks like { token, user }.
+  const startSession = ({ token, user: u }) => {
+    setToken(token);
+    setUser(u);
+    return u;
   };
+
+  const post = (path, body) => api(path, { method: 'POST', body });
 
   const value = {
     user,
     loading,
-    login: (phone, password) => api('/auth/login', { method: 'POST', body: { phone, password } }).then(finish),
-    register: (fields) => api('/auth/register', { method: 'POST', body: fields }).then(finish),
+    // customers: number + 4-digit PIN
+    loginWithPin: (phone, pin) => post('/auth/login', { phone, pin }).then(startSession),
+    // admin (and workers on the web): number + password
+    loginWithPassword: (phone, password) => post('/auth/login', { phone, password }).then(startSession),
+    // after a sign-up code was checked: name + PIN creates the account
+    register: ({ ticket, name, pin, area, language }) =>
+      post('/auth/register', { role: 'customer', ticket, name, pin, area: area || undefined, language }).then(startSession),
+    // after a "forgot PIN" code was checked
+    resetPin: ({ ticket, pin }) => post('/auth/pin/reset', { ticket, pin }).then(startSession),
     logout: () => {
-      localStorage.removeItem('token');
+      setToken(null);
       setUser(null);
     },
   };

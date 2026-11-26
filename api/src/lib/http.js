@@ -2,9 +2,12 @@
 
 // Throw httpError(404, 'Job not found') anywhere in a route and the error
 // handler in app.js turns it into a proper JSON response.
-export function httpError(status, message) {
+// Optional `extra` adds fields to the JSON answer, e.g. { code: 'pin_locked', minutes: 10 }.
+// The apps use `code` to show the message in the user's language.
+export function httpError(status, message, extra) {
   const err = new Error(message);
   err.status = status;
+  err.extra = extra;
   return err;
 }
 

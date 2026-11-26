@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   agreementTotal, canPropose, reliability, canVouch, strikeConsequence, applyStrike,
   strikesInWindow, disputeWindowOpen, isExpired, areaWithNeighbours, daysAgo,
+  isValidPin, recordWrongPin, lockMinutesLeft, PIN_LOCK,
 } from '../src/lib/rules.js';
 import { normalisePhone } from '../src/lib/http.js';
 
@@ -88,4 +89,18 @@ test('phone numbers are stored in one format', () => {
   assert.equal(normalisePhone('0300-1234567'), '03001234567');
   assert.equal(normalisePhone('+92 300 1234567'), '03001234567');
   assert.equal(normalisePhone('12345'), null);
+});
+
+test('a PIN is exactly 4 numbers', () => {
+  assert.ok(isValidPin('0123'));
+  for (const bad of ['123', '12345', '12a4', '', null, ' 123']) assert.ok(!isValidPin(bad), bad);
+});
+
+test('5 wrong PINs in a row lock the account for 10 minutes', () => {
+  const now = new Date('2026-12-01T10:00:00Z');
+  const user = {};
+  for (let i = 1; i < PIN_LOCK.maxTries; i += 1) assert.equal(recordWrongPin(user, now).triesLeft, PIN_LOCK.maxTries - i);
+  assert.deepEqual(recordWrongPin(user, now), { locked: true, minutes: 10 });
+  assert.equal(lockMinutesLeft(user, now), 10);
+  assert.equal(lockMinutesLeft(user, new Date(now.getTime() + 11 * 60000)), 0);
 });

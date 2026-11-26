@@ -7,7 +7,7 @@ import User from '../models/User.js';
 import { httpError } from '../lib/http.js';
 
 export function signToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role }, config.jwtSecret, { expiresIn: '30d' });
+  return jwt.sign({ sub: user._id.toString(), role: user.role }, config.jwtSecret, { expiresIn: config.tokenExpiry });
 }
 
 // requireAuth() = any logged-in user; requireAuth('admin') = admins only, etc.

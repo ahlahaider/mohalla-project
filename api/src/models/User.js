@@ -20,7 +20,11 @@ const userSchema = new Schema({
   role: { type: String, enum: ['customer', 'worker', 'admin'], required: true },
   name: { type: String, required: true, trim: true },
   phone: { type: String, required: true, unique: true }, // one account per phone
-  passwordHash: { type: String, required: true, select: false }, // never sent back by default
+  // Customers: a hashed 4-digit PIN. Workers and admin: a hashed password (for now).
+  // Hidden by default so it is never sent back by accident.
+  passwordHash: { type: String, required: true, select: false },
+  failedLogins: { type: Number, default: 0 }, // wrong PINs in a row (see PIN_LOCK in rules.js)
+  lockedUntil: Date,
   area: String,
   language: { type: String, enum: ['en', 'roman-ur'], default: 'en' },
 

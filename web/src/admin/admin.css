@@ -1,0 +1,118 @@
+/* The admin screens' original look (from the starter code), kept separate:
+   every rule only applies inside <div className="admin">, so it can't clash
+   with the customer app's styles in ui/app.css. */
+
+.admin {
+  --terracotta: #b4472a;
+  
+  --terracotta-dark: #8f3720;
+  
+  --marigold: #f2b33d;
+  
+  --green: #2f6b4f;
+  
+  --red: #b3261e;
+  
+  --cream: #fff3e2;
+  
+  --card: #ffffff;
+  
+  --line: #f1d9b8;
+  
+  --ink: #3a2117;
+  
+  --muted: #7a5a4a;
+  
+  --radius: 14px;
+  
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  
+  color: var(--ink);
+  
+  background: var(--cream);
+  min-height: 100dvh;
+}
+
+.admin a { color: var(--terracotta); }
+
+.admin h1, .admin h2, .admin h3 { margin: 0 0 8px; line-height: 1.2; }
+
+.admin p { margin: 0 0 8px; }
+
+.admin .shell { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+.admin .topbar { display: flex; align-items: center; gap: 16px; padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+
+.admin .logo { font-weight: 700; font-size: 28px; color: var(--terracotta); text-decoration: none; line-height: 1; }
+
+.admin .topbar nav { display: flex; gap: 14px; flex: 1; flex-wrap: wrap; }
+
+.admin .topbar nav a { text-decoration: none; font-weight: 600; color: var(--ink); }
+
+.admin .topbar nav a.active { color: var(--terracotta); }
+
+.admin .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+
+.admin .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.admin .spread { justify-content: space-between; }
+
+.admin .muted { color: var(--muted); font-size: 14px; }
+
+.admin .error { color: var(--red); font-weight: 600; }
+
+.admin .ok { color: var(--green); font-weight: 600; }
+
+.admin button, .admin .btn { font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
+
+.admin button.primary, .admin .btn.primary { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+
+.admin button.primary:hover { background: var(--terracotta-dark); }
+
+.admin button.go { background: var(--green); border-color: var(--green); color: #fff; }
+
+.admin button.stop { background: var(--red); border-color: var(--red); color: #fff; }
+
+.admin button:disabled { opacity: 0.5; cursor: default; }
+
+.admin input, .admin select, .admin textarea { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+
+.admin label { display: block; font-weight: 600; margin-bottom: 10px; }
+
+.admin label > input, .admin label > select, .admin label > textarea { margin-top: 4px; font-weight: 400; }
+
+.admin label.check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+
+.admin label.check input { width: auto; }
+
+.admin .cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 12px 0; }
+
+.admin .cat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px; }
+
+.admin .cat .emoji { font-size: 28px; }
+
+.admin .cat.on { border-color: var(--terracotta); background: #fbe3d6; }
+
+.admin .avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--marigold); color: #5a2a16; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }
+
+.admin .chip { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; background: #f6ead8; color: var(--ink); }
+
+.admin .chip.green { background: #dcefe4; color: var(--green); }
+
+.admin .chip.gold { background: #fde9bf; color: #6b4a07; }
+
+.admin .chip.red { background: #f9dcd9; color: var(--red); }
+
+.admin .entry { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); }
+
+.admin .entry.rejected { opacity: 0.55; text-decoration: line-through; }
+
+.admin .stars button { font-size: 24px; padding: 2px 6px; border: none; background: none; color: #d8c3a5; }
+
+.admin .stars button.on { color: var(--marigold); }
+
+.admin .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.admin .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.admin .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }

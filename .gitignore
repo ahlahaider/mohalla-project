@@ -1,0 +1,14 @@
+# Installed packages: anyone can recreate these with "npm install"
+node_modules/
+
+# Secrets (database password, JWT secret, WhatsApp keys). Never commit these.
+.env
+.env.*
+!.env.example
+
+# Build output and editor/OS clutter
+dist/
+.expo/
+web-build/
+.DS_Store
+*.log

@@ -15,6 +15,30 @@ export const UNRESOLVED_FLAG = { count: 3, withinDays: 30 };
 export const NEW_ACCOUNT_JOBS = 5;       // fewer completed jobs than this shows "New"
 export const VOUCH = { minCompletedJobs: 10, minCompletionRate: 0.9, maxActive: 3, probationJobs: 10 };
 
+// A 4-digit PIN has only 10,000 options, so after 5 wrong tries the number is
+// locked for a while. That makes guessing someone's PIN take months, not minutes.
+export const PIN_LOCK = { maxTries: 5, lockMinutes: 10 };
+
+export const isValidPin = (pin) => /^\d{4}$/.test(String(pin ?? ''));
+
+// Called after a wrong PIN. Counts the try and locks the account once the
+// limit is reached. Works on a plain object or a Mongoose document; the caller saves it.
+export function recordWrongPin(user, now = new Date()) {
+  user.failedLogins = (user.failedLogins || 0) + 1;
+  if (user.failedLogins >= PIN_LOCK.maxTries) {
+    user.failedLogins = 0;
+    user.lockedUntil = new Date(now.getTime() + PIN_LOCK.lockMinutes * 60 * 1000);
+    return { locked: true, minutes: PIN_LOCK.lockMinutes };
+  }
+  return { locked: false, triesLeft: PIN_LOCK.maxTries - user.failedLogins };
+}
+
+// Whole minutes left on a lock (0 = not locked).
+export function lockMinutesLeft(user, now = new Date()) {
+  if (!user.lockedUntil || user.lockedUntil <= now) return 0;
+  return Math.ceil((user.lockedUntil - now) / 60000);
+}
+
 export const CATEGORIES = [
   'plumber', 'electrician', 'cleaner', 'carpenter',
   'mechanic', 'fumigator', 'painter', 'ac-technician',

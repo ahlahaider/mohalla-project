@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, rupees } from '../api.js';
 import { useLang } from '../i18n.jsx';
-import { StatusChip } from '../components/bits.jsx';
+import './admin.css';
 
 export default function Admin() {
   const [tab, setTab] = useState('disputes');
@@ -165,4 +165,11 @@ function Reports() {
       ))}
     </>
   );
+}
+
+// Coloured label for a status (was in components/bits.jsx before the customer redesign).
+function StatusChip({ status }) {
+  const { status: label } = useLang();
+  const colour = { completed: 'green', agreed: 'green', accepted: 'green', declined: 'red', expired: 'red', cancelled: 'red', rejected: 'red', upheld: 'red' }[status] || 'gold';
+  return <span className={`chip ${colour}`}>{label(status)}</span>;
 }

@@ -25,9 +25,24 @@ router.get('/', asyncRoute(async (req, res) => {
   if (female === 'true') filter['workerProfile.gender'] = 'female';
 
   const workers = await User.find(filter).limit(100);
-  const ratings = await visibleRatings(workers.map((w) => w._id));
+  const ids = workers.map((w) => w._id);
+  const [ratings, vouches] = await Promise.all([
+    visibleRatings(ids),
+    Vouch.find({ to: { $in: ids }, active: true }).populate('from', 'name'),
+  ]);
 
-  const results = workers.map((w) => ({ ...w.toPublic(), rating: ratings.get(w._id.toString()) || null }));
+  // Who vouches for each worker, so result cards can say "Rashid trusts him".
+  const vouchedBy = new Map();
+  for (const v of vouches) {
+    const key = v.to.toString();
+    vouchedBy.set(key, [...(vouchedBy.get(key) || []), { id: v.from._id, name: v.from.name }]);
+  }
+
+  const results = workers.map((w) => ({
+    ...w.toPublic(),
+    rating: ratings.get(w._id.toString()) || null,
+    vouchedBy: vouchedBy.get(w._id.toString()) || [],
+  }));
 
   // Order: featured (paid) first, then founding, then workers in the exact
   // area searched, then by number of completed jobs.

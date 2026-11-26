@@ -10,6 +10,7 @@ import { app } from '../src/app.js';
 import User from '../src/models/User.js';
 import Job from '../src/models/Job.js';
 import { Review, Dispute, Vouch, Report } from '../src/models/others.js';
+import Otp from '../src/models/Otp.js';
 
 const uri = process.env.TEST_MONGO_URI;
 const opts = { skip: !uri && 'set TEST_MONGO_URI to run' };
@@ -20,7 +21,7 @@ let base;
 before(async () => {
   if (!uri) return;
   await mongoose.connect(uri);
-  await Promise.all([User, Job, Review, Dispute, Vouch, Report].map((m) => m.deleteMany({})));
+  await Promise.all([User, Job, Review, Dispute, Vouch, Report, Otp].map((m) => m.deleteMany({})));
   // Admins can't register through the API, so make one directly.
   await User.create({ role: 'admin', name: 'Admin', phone: '03000000000', passwordHash: await bcrypt.hash('secret1', 4) });
   server = app.listen(0);
@@ -48,7 +49,13 @@ async function call(method, path, token, body, expect = [200, 201]) {
 }
 
 test('a direct job goes from request to rating, then a dispute is ruled', opts, async () => {
-  const c = await call('POST', '/auth/register', null, { role: 'customer', name: 'Sana', phone: '03001111111', password: 'secret1', area: 'pechs' });
+  // Customer signs up: number -> code (demo mode returns it) -> name + PIN.
+  const check = await call('POST', '/auth/phone', null, { phone: '0300-1111111' });
+  assert.equal(check.registered, false);
+  const sent = await call('POST', '/auth/otp/request', null, { phone: '03001111111', channel: 'whatsapp' });
+  assert.equal(sent.demoCode, '1234');
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03001111111', code: sent.demoCode });
+  const c = await call('POST', '/auth/register', null, { role: 'customer', ticket, name: 'Sana', pin: '4321', area: 'pechs' });
   const w = await call('POST', '/auth/register', null, {
     role: 'worker', name: 'Rashid', phone: '03111111111', password: 'secret1', area: 'pechs',
     workerProfile: { skills: ['electrician'], areasServed: ['pechs'], priceMin: 800, priceMax: 5000 },
@@ -111,7 +118,7 @@ test('a direct job goes from request to rating, then a dispute is ruled', opts, 
 });
 
 test('requests can be declined, and only the assigned worker can answer', opts, async () => {
-  const c = await call('POST', '/auth/login', null, { phone: '03001111111', password: 'secret1' });
+  const c = await call('POST', '/auth/login', null, { phone: '03001111111', pin: '4321' });
   const other = await call('POST', '/auth/register', null, {
     role: 'worker', name: 'Other', phone: '03119999999', password: 'secret1', area: 'pechs',
     workerProfile: { skills: ['electrician'], areasServed: ['pechs'] },
@@ -123,4 +130,33 @@ test('requests can be declined, and only the assigned worker can answer', opts, 
   await call('POST', `/jobs/${job.id}/accept`, other.token, null, 403);
   const res = await call('POST', `/jobs/${job.id}/decline`, w.token);
   assert.equal(res.status, 'declined');
+});
+
+test('sign-up codes: wrong code, then right code; ticket needed to register', opts, async () => {
+  await call('POST', '/auth/register', null, { role: 'customer', ticket: 'made-up', name: 'X', pin: '1111' }, 401);
+  await call('POST', '/auth/otp/request', null, { phone: '03004444444', channel: 'sms' });
+  await call('POST', '/auth/otp/request', null, { phone: '03004444444', channel: 'sms' }, 429); // too soon
+  const wrong = await call('POST', '/auth/otp/verify', null, { phone: '03004444444', code: '0000' }, 400);
+  assert.equal(wrong.code, 'otp_wrong');
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03004444444', code: '1234' });
+  await call('POST', '/auth/otp/verify', null, { phone: '03004444444', code: '1234' }, 400); // a code works once
+  await call('POST', '/auth/register', null, { role: 'customer', ticket, name: 'Ayesha', pin: '12a4' }, 400);
+  const a = await call('POST', '/auth/register', null, { role: 'customer', ticket, name: 'Ayesha', pin: '2468' }, 201);
+  assert.equal(a.user.phone, '03004444444');
+  await call('POST', '/auth/otp/request', null, { phone: '03004444444', channel: 'sms' }, 409); // already signed up
+});
+
+test('5 wrong PINs lock the number; a reset code sets a new PIN', opts, async () => {
+  for (let i = 1; i <= 4; i += 1) {
+    const r = await call('POST', '/auth/login', null, { phone: '03004444444', pin: '0000' }, 401);
+    assert.equal(r.triesLeft, 5 - i);
+  }
+  const locked = await call('POST', '/auth/login', null, { phone: '03004444444', pin: '0000' }, 423);
+  assert.equal(locked.code, 'pin_locked');
+  await call('POST', '/auth/login', null, { phone: '03004444444', pin: '2468' }, 423); // even the right PIN waits
+
+  await call('POST', '/auth/otp/request', null, { phone: '03004444444', channel: 'whatsapp', purpose: 'reset' });
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03004444444', purpose: 'reset', code: '1234' });
+  await call('POST', '/auth/pin/reset', null, { ticket, pin: '1357' });
+  await call('POST', '/auth/login', null, { phone: '03004444444', pin: '1357' });
 });

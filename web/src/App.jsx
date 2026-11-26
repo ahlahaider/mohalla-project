@@ -1,58 +1,67 @@
-// Top bar + the list of pages. Each <Route> maps a web address to a page.
-import { NavLink, Link, Route, Routes, Navigate } from 'react-router-dom';
+// The list of pages. Each <Route> maps a web address to a screen.
+//
+// Screens 1–3 (home, results, worker profile) and Help work WITHOUT an account.
+// Everything else is wrapped in <NeedLogin>, which sends the person to /login
+// with ?returnTo=<this page>, so they come straight back after logging in.
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
 import { useLang } from './i18n.jsx';
-import Search from './pages/Search.jsx';
-import WorkerPage from './pages/WorkerPage.jsx';
+import { Loading } from './ui/kit.jsx';
+import Home from './pages/Home.jsx';
+import Results from './pages/Results.jsx';
+import WorkerProfile from './pages/WorkerProfile.jsx';
 import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import PostJob from './pages/PostJob.jsx';
+import RequestForm from './pages/RequestForm.jsx';
 import MyJobs from './pages/MyJobs.jsx';
-import JobDetail from './pages/JobDetail.jsx';
-import Admin from './pages/Admin.jsx';
+import JobPage from './pages/JobPage.jsx';
+import Finish from './pages/Finish.jsx';
+import Problem from './pages/Problem.jsx';
+import Help from './pages/Help.jsx';
+import { AdminPage, AdminLogin } from './admin/AdminShell.jsx';
 
-// Sends logged-out visitors to the login page (and non-admins away from /admin).
-function Protected({ role, children }) {
+function NeedLogin({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" />;
-  if (role && user.role !== role) return <Navigate to="/" />;
+  const { t } = useLang();
+  const location = useLocation();
+  if (loading) return <Loading />;
+  if (!user) {
+    const returnTo = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?returnTo=${returnTo}`} replace />;
+  }
+  if (user.role === 'admin') return <Navigate to="/admin" replace />;
+  if (user.role !== 'customer') {
+    return <main className="page"><p className="error-box">{t('customersOnly', { role: user.role })}</p></main>;
+  }
   return children;
 }
 
+const customer = (page) => <NeedLogin>{page}</NeedLogin>;
+
 export default function App() {
-  const { user, logout } = useAuth();
-  const { t, toggle, lang } = useLang();
-
   return (
-    <>
-      <header className="topbar">
-        <Link to="/" className="logo">mohalla</Link>
-        <nav>
-          <NavLink to="/" end>{t('findHelp')}</NavLink>
-          {user?.role === 'customer' && <NavLink to="/post">{t('postJob')}</NavLink>}
-          {user && user.role !== 'admin' && <NavLink to="/jobs">{t('myJobs')}</NavLink>}
-          {user?.role === 'admin' && <NavLink to="/admin">{t('admin')}</NavLink>}
-        </nav>
-        <button onClick={toggle}>{lang === 'en' ? 'Roman Urdu' : 'English'}</button>
-        {user
-          ? <button onClick={logout}>{t('logout')}</button>
-          : <Link className="btn primary" to="/login">{t('login')}</Link>}
-      </header>
+    <Routes>
+      {/* admin keeps its own desktop layout and password login */}
+      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
 
-      <main className="shell">
-        <Routes>
-          <Route path="/" element={<Search />} />
-          <Route path="/workers/:id" element={<WorkerPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/post" element={<Protected role="customer"><PostJob /></Protected>} />
-          <Route path="/jobs" element={<Protected><MyJobs /></Protected>} />
-          <Route path="/jobs/:id" element={<Protected><JobDetail /></Protected>} />
-          <Route path="/admin" element={<Protected role="admin"><Admin /></Protected>} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </main>
-    </>
+      {/* the customer app: one phone-sized column */}
+      <Route path="*" element={(
+        <div className="app">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/find/:category" element={<Results />} />
+            <Route path="/workers/:id" element={<WorkerProfile />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/workers/:id/request" element={customer(<RequestForm />)} />
+            <Route path="/jobs" element={customer(<MyJobs />)} />
+            <Route path="/jobs/:id" element={customer(<JobPage />)} />
+            <Route path="/jobs/:id/finish" element={customer(<Finish />)} />
+            <Route path="/jobs/:id/problem" element={customer(<Problem />)} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      )} />
+    </Routes>
   );
 }

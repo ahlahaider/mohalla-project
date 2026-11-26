@@ -73,6 +73,8 @@ async function jobView(job, user) {
     address: showContact ? job.address : undefined,
     preferredTime: job.preferredTime,
     expiresAt: job.expiresAt,
+    createdAt: job.createdAt,
+    acceptedAt: job.acceptedAt,
     customer: { ...person(job.customer), rating: ratings.get(idOf(job.customer).toString()) || null,
       paidOnRecord: job.customer.stats?.paidOnRecord, jobsCompleted: job.customer.stats?.jobsCompleted },
     worker: job.worker ? { ...person(job.worker), rating: ratings.get(idOf(job.worker).toString()) || null } : null,
@@ -173,6 +175,7 @@ router.post('/:id/accept', requireAuth('worker'), asyncRoute(async (req, res) =>
   requireStatus(job, 'requested');
 
   job.status = 'accepted';
+  job.acceptedAt = new Date();
   await job.save();
   await User.updateOne({ _id: req.user._id }, { $inc: { 'stats.jobsAccepted': 1 } });
   res.json({ status: job.status });
@@ -223,6 +226,7 @@ router.post('/:id/quotes/:quoteId/pick', requireAuth('customer'), asyncRoute(asy
   // From here a posted job follows the same path as a direct request.
   job.worker = quote.worker;
   job.status = 'accepted';
+  job.acceptedAt = new Date();
   await job.save();
   await User.updateOne({ _id: quote.worker }, { $inc: { 'stats.jobsAccepted': 1 } });
   res.json({ status: job.status });

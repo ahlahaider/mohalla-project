@@ -46,6 +46,7 @@ const jobSchema = new Schema({
     required: true,
   },
   expiresAt: Date,
+  acceptedAt: Date, // when the worker said yes (shown on the customer's job timeline)
   cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
 
   quotes: [quoteSchema],

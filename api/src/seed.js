@@ -9,17 +9,19 @@ import Job from './models/Job.js';
 import { Review, Dispute, Vouch, Report } from './models/others.js';
 import { daysAgo } from './lib/rules.js';
 
-const PASSWORD = 'password123';
+const PASSWORD = 'password123'; // workers and admin
+const PIN = '1234';             // customers log in with number + PIN
 
 await mongoose.connect(config.mongoUri);
 await Promise.all([User, Job, Review, Dispute, Vouch, Report].map((m) => m.deleteMany({})));
 const passwordHash = await bcrypt.hash(PASSWORD, 10);
+const pinHash = await bcrypt.hash(PIN, 10);
 
 const user = (fields) => User.create({ passwordHash, ...fields });
 
 const admin = await user({ role: 'admin', name: 'Mohalla Admin', phone: '03000000000', area: 'pechs' });
-const sana = await user({ role: 'customer', name: 'Sana Qureshi', phone: '03001111111', area: 'gulshan-e-iqbal' });
-const bilal = await user({ role: 'customer', name: 'Bilal Ahmed', phone: '03002222222', area: 'dha', language: 'roman-ur' });
+const sana = await user({ passwordHash: pinHash, role: 'customer', name: 'Sana Qureshi', phone: '03001111111', area: 'gulshan-e-iqbal' });
+const bilal = await user({ passwordHash: pinHash, role: 'customer', name: 'Bilal Ahmed', phone: '03002222222', area: 'dha', language: 'roman-ur' });
 
 // [name, phone, skills, areas, priceMin, priceMax, gender, founding, verified, completed, accepted, onTimeYes]
 const workerRows = [
@@ -72,9 +74,9 @@ await finishedJob(bilal, workers[3], 'cleaner', 'Deep clean before Eid guests',
 
 await Promise.all([sana, bilal].map((c) => User.updateOne({ _id: c._id }, { $inc: { 'stats.jobsCompleted': 2, 'stats.paidOnRecord': 2 } })));
 
-console.log(`Seeded. Every account's password is "${PASSWORD}".`);
+console.log(`Seeded. Customers log in with PIN ${PIN}; workers and admin with password "${PASSWORD}".`);
 console.log('Admin:     03000000000');
-console.log('Customers: 03001111111 (Sana), 03002222222 (Bilal)');
+console.log(`Customers: 03001111111 (Sana), 03002222222 (Bilal)  PIN ${PIN}`);
 console.log('Workers:   03111111111 (Rashid, electrician), 03112222222 (Imran, plumber), 03113333333 (Shabana, cleaner) ...');
 console.log(`Admin id: ${admin._id}`);
 await mongoose.disconnect();

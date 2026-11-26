@@ -1,34 +1,94 @@
+// My jobs: jobs still moving on top, finished ones below.
+// A red "Needs your OK" tag shows where the customer has to answer a price.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, rupees } from '../api.js';
+import { ClipboardText, MagnifyingGlass, SignOut } from '@phosphor-icons/react';
+import { api, errorText, rupees, prettyPhone } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import { useLang } from '../i18n.jsx';
-import { StatusChip } from '../components/bits.jsx';
+import { firstName } from '../prefs.js';
+import { CATEGORY } from '../ui/icons.js';
+import { Ico, Say, Loading, ErrorBox, BottomNav } from '../ui/kit.jsx';
+import { jobStatus, whenText } from './JobPage.jsx';
+
+const MOVING = ['open', 'requested', 'accepted', 'agreed'];
 
 export default function MyJobs() {
-  const { t, cat, icon, areaName } = useLang();
+  const L = useLang();
+  const { t } = L;
+  const { user, logout } = useAuth();
   const [jobs, setJobs] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
 
-  useEffect(() => { api('/jobs/mine').then((d) => setJobs(d.jobs)).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { api('/jobs/mine').then((d) => setJobs(d.jobs)).catch(setError); }, []);
+
+  const now = jobs?.filter((j) => MOVING.includes(j.status)) || [];
+  const before = jobs?.filter((j) => !MOVING.includes(j.status)) || [];
+  const waiting = jobs?.filter((j) => j.needsMe).length || 0;
 
   return (
     <>
-      <h1>{t('myJobs')}</h1>
-      {error && <p className="error">{error}</p>}
-      {jobs?.length === 0 && <p className="muted">{t('noJobs')} <Link to="/">{t('findHelp')}</Link></p>}
-      {jobs?.map((j) => (
-        <Link key={j.id} to={`/jobs/${j.id}`} className="card row spread" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>{icon(j.category)} {cat(j.category)} {j.worker && <span className="muted">· {j.worker}</span>}</h3>
-            <p className="muted" style={{ margin: 0 }}>{j.description.slice(0, 80)} · {areaName(j.area)}</p>
+      <header className="topbar">
+        <Ico icon={ClipboardText} tone="henna" size={26} box={48} />
+        <div className="titles"><h1><Say k="navJobs" /></h1></div>
+      </header>
+
+      <main className="page">
+        <ErrorBox>{error && errorText(error, L)}</ErrorBox>
+        {!jobs && !error && <Loading />}
+
+        {jobs?.length === 0 && (
+          <div className="empty card">
+            <Ico icon={MagnifyingGlass} tone="saffron" size={44} />
+            <h2 className="q"><Say k="noJobs" className="center" /></h2>
+            <p className="muted">{t('noJobsHint')}</p>
+            <Link to="/" className="btn btn--henna"><Say k="findWorker" /></Link>
           </div>
-          <div className="row">
-            {j.needsMe && <span className="chip red">{t('needsYou')}</span>}
-            {j.total > 0 && <strong>{rupees(j.total)}</strong>}
-            <StatusChip status={j.status} />
+        )}
+
+        {now.length > 0 && <List label={t('jobsNow')} jobs={now} />}
+        {before.length > 0 && <List label={t('jobsBefore')} jobs={before} />}
+
+        {user && (
+          <div className="box row spread" style={{ marginTop: 32 }}>
+            <span className="small" style={{ fontWeight: 700 }}>
+              {t('loggedInAs', { name: user.name })}<br />
+              <span className="muted">{prettyPhone(user.phone)}</span>
+            </span>
+            <button type="button" className="btn btn--ghost btn--small" style={{ width: 'auto' }} onClick={logout}>
+              <SignOut size={22} weight="bold" />{t('logout')}
+            </button>
           </div>
-        </Link>
-      ))}
+        )}
+      </main>
+      <BottomNav waiting={waiting} />
     </>
+  );
+}
+
+function List({ label, jobs }) {
+  const { t, cat } = useLang();
+  return (
+    <section className="stack">
+      <div className="section-label">{label}</div>
+      {jobs.map((j, i) => {
+        const svc = CATEGORY[j.category];
+        const st = jobStatus(j);
+        const name = firstName(j.worker || '');
+        return (
+          <Link key={j.id} to={`/jobs/${j.id}`} className="card job-row rise-in" style={{ '--i': i }}>
+            {svc && <Ico icon={svc.icon} tone={j.category} size={30} box={54} />}
+            <div className="info">
+              <b>{j.description.split('. ')[0]}</b>
+              <div className="muted">{[name, cat(j.category), whenText(j.preferredTime, t)].filter(Boolean).join(' · ')}</div>
+            </div>
+            <div className="side">
+              {j.needsMe ? <span className="tag chilli">{t('needsYou')}</span> : <span className={`tag ${st.tone}`}>{t(st.k, { name })}</span>}
+              {j.total > 0 && <b>{rupees(j.total)}</b>}
+            </div>
+          </Link>
+        );
+      })}
+    </section>
   );
 }

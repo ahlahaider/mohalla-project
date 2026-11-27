@@ -137,8 +137,8 @@ export function applyStrike(user, { reason, dispute }, now = new Date()) {
 
 export function disputeWindowOpen(job, type, now = new Date()) {
   if (job.completedAt) return now - job.completedAt <= DISPUTE_WINDOW_HOURS * HOUR;
-  // A no-show can be disputed before completion, once the job was accepted.
-  return type === 'no-show' && ['accepted', 'agreed'].includes(job.status);
+  // Before completion (once accepted): a no-show, or a safety problem, which can't wait.
+  return ['no-show', 'misconduct'].includes(type) && ['accepted', 'agreed'].includes(job.status);
 }
 
 export const hoursFromNow = (h, now = new Date()) => new Date(now.getTime() + h * HOUR);

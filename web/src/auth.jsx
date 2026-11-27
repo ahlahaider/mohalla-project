@@ -31,14 +31,14 @@ export function AuthProvider({ children }) {
     user,
     loading,
     // customers: number + 4-digit PIN
-    loginWithPin: (phone, pin) => post('/auth/login', { phone, pin }).then(startSession),
+    loginWithPin: (phone, pin) => post('/auth/login', { phone, pin, app: 'customer' }).then(startSession),
     // admin (and workers on the web): number + password
     loginWithPassword: (phone, password) => post('/auth/login', { phone, password }).then(startSession),
     // after a sign-up code was checked: name + PIN creates the account
     register: ({ ticket, name, pin, area, language }) =>
       post('/auth/register', { role: 'customer', ticket, name, pin, area: area || undefined, language }).then(startSession),
     // after a "forgot PIN" code was checked
-    resetPin: ({ ticket, pin }) => post('/auth/pin/reset', { ticket, pin }).then(startSession),
+    resetPin: ({ ticket, pin }) => post('/auth/pin/reset', { ticket, pin, app: 'customer' }).then(startSession),
     logout: () => {
       setToken(null);
       setUser(null);

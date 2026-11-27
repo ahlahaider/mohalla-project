@@ -485,6 +485,23 @@ h2.q .ur { font-size: 16px; }
   border-top: 2px solid var(--line);
 }
 
+/* ---------- photos ---------- */
+.avatar--photo { object-fit: cover; padding: 0; }
+.photo-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.photo-thumb { position: relative; width: 88px; height: 88px; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm); background: var(--paper-deep); box-shadow: 0 0 0 2px var(--line); }
+.photo-thumb button {
+  position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%;
+  border: 0; background: var(--ink); color: #fff; display: grid; place-items: center; cursor: pointer;
+}
+.photo-row--view img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--r-sm); background: var(--paper-deep); cursor: zoom-in; }
+.spin { animation: spin 1s linear infinite; }
+
+/* ---------- a reported problem: both sides' words ---------- */
+.said { max-width: 88%; padding: 10px 12px; border-radius: var(--r-md); background: var(--paper-deep); }
+.said.mine { margin-left: auto; background: var(--leaf-tint); }
+.said .who { font: 800 13px/1.3 var(--font); color: var(--ink-3); }
+
 /* ---------- people ---------- */
 .avatar {
   --av: 64px;

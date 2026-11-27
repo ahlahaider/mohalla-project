@@ -15,6 +15,12 @@ export function httpError(status, message, extra) {
 // Wrapping every async route in this passes those errors to the error handler.
 export const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+// A photo address the apps may save: one of our uploads, or (seed data) an https link.
+export const isPhotoUrl = (u) => typeof u === 'string' && (/^\/api\/photos\/[a-f0-9]{32}$/.test(u) || /^https:\/\/\S+$/.test(u));
+
+// Keeps only valid photo addresses, at most `max` of them.
+export const photoList = (list, max) => (Array.isArray(list) ? list.filter(isPhotoUrl).slice(0, max) : []);
+
 // Pakistani mobile numbers: accept "0300-1234567", "+92 300 1234567", etc.,
 // and store them in one format (03001234567) so the same phone can't sign up twice.
 export function normalisePhone(raw = '') {

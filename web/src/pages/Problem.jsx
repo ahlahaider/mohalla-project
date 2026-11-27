@@ -7,13 +7,13 @@ import { UserMinus, Scales, Money, ShieldWarning, PaperPlaneTilt, Info } from '@
 import { api, errorText } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { firstName } from '../prefs.js';
-import { TopBar, Ico, Say, Loading, ErrorBox } from '../ui/kit.jsx';
+import { TopBar, Ico, Say, Loading, ErrorBox, PhotoPicker } from '../ui/kit.jsx';
 
 const TYPES = [
-  { key: 'no-show', icon: UserMinus, tone: 'saffron' },
+  { key: 'no-show', icon: UserMinus, tone: 'saffron', before: true },
   { key: 'scope', icon: Scales, tone: 'henna' },
   { key: 'non-payment', icon: Money, tone: 'leaf' },
-  { key: 'misconduct', icon: ShieldWarning, tone: 'chilli' },
+  { key: 'misconduct', icon: ShieldWarning, tone: 'chilli', before: true },
 ];
 
 export default function Problem() {
@@ -24,6 +24,7 @@ export default function Problem() {
   const [job, setJob] = useState(null);
   const [type, setType] = useState(null);
   const [text, setText] = useState('');
+  const [photos, setPhotos] = useState([]);
   const [error, setError] = useState(null);
   const [sending, setSending] = useState(false);
 
@@ -36,7 +37,7 @@ export default function Problem() {
     setSending(true);
     setError(null);
     try {
-      await api(`/jobs/${id}/disputes`, { method: 'POST', body: { type, text: text.trim() } });
+      await api(`/jobs/${id}/disputes`, { method: 'POST', body: { type, text: text.trim(), evidenceUrls: photos } });
       navigate(`/jobs/${id}`, { replace: true });
     } catch (err) {
       setError(err);
@@ -49,7 +50,8 @@ export default function Problem() {
       <TopBar title={t('problemTitle')} sub={t('problemSub')} back={`/jobs/${id}`} />
       <main className="page">
         <div className="stack">
-          {TYPES.map((x) => (
+          {/* Before the work is finished, only "did not come" and safety problems can be reported. */}
+          {TYPES.filter((x) => job.status === 'completed' || x.before).map((x) => (
             <button key={x.key} type="button" className="area-option" style={{ minHeight: 66 }} aria-pressed={type === x.key} onClick={() => setType(x.key)}>
               <Ico icon={x.icon} tone={x.tone} size={26} box={46} />
               <Say k={`d_${x.key}`} vars={{ name }} />
@@ -68,6 +70,11 @@ export default function Problem() {
           <span className="field-label"><Say k="tellWhat" /></span>
           <textarea className="input" rows={4} value={text} onChange={(e) => setText(e.target.value.slice(0, 2000))} />
         </label>
+
+        <div className="field">
+          <span className="field-label"><span>{t('addProof')}</span></span>
+          <PhotoPicker photos={photos} onChange={setPhotos} label="addPhoto" />
+        </div>
 
         <div className="box note">
           <Ico icon={Info} tone="ink" size={22} />

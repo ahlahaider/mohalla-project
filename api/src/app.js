@@ -11,12 +11,15 @@ import jobRoutes from './routes/jobs.js';
 import disputeRoutes from './routes/disputes.js';
 import vouchRoutes from './routes/vouches.js';
 import userRoutes from './routes/users.js';
+import photoRoutes from './routes/photos.js';
 import { adminRouter, reportsRouter } from './routes/admin.js';
 import { AREAS, CATEGORIES } from './lib/rules.js';
 
 export const app = express();
 
 app.use(cors()); // lets the web app (a different address) call this API
+// Photo uploads are bigger than other requests, so they get their own size limit.
+app.use('/api/photos', express.json({ limit: '4mb' }), photoRoutes);
 app.use(express.json()); // reads JSON request bodies into req.body
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -44,6 +47,7 @@ app.use((err, req, res, next) => {
     return res.status(400).json({ error: `Invalid ${err.path}` }); // e.g. a malformed id
   }
   if (err.code === 11000) return res.status(409).json({ error: 'That already exists' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'The photo is too big', code: 'photo_too_big' });
   if (!err.status) console.error(err); // unexpected: log it for us
   res.status(err.status || 500).json(err.status ? { error: err.message, ...err.extra } : { error: 'Something went wrong' });
 });

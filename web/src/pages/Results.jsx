@@ -132,7 +132,7 @@ function WorkerCard({ worker, category, i }) {
   return (
     <Link to={`/workers/${worker.id}?cat=${category}`} className="card worker-card rise-in" style={{ '--i': i }}>
       <div className="head">
-        <Avatar name={worker.name} />
+        <Avatar name={worker.name} photoUrl={worker.photoUrl} />
         <div style={{ minWidth: 0 }}>
           <h3>{worker.name}</h3>
           <WorkerBadges worker={worker} />

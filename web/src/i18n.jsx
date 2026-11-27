@@ -139,6 +139,33 @@ const S = {
   err_not_registered: ['No account with this number yet.', 'Is number ka abhi koi account nahi.', 'اس نمبر کا ابھی کوئی اکاؤنٹ نہیں۔'],
   err_no_name: ['Enter your name', 'Apna naam likhein', 'اپنا نام لکھیں'],
   err_banned: ['This account is blocked.', 'Yeh account band hai.', 'یہ اکاؤنٹ بند ہے۔'],
+  err_wrong_app: ['This number is a worker account. Workers use the Mohalla Worker app.', 'Yeh number worker account hai. Worker Mohalla Worker app use karte hain.', 'یہ نمبر کاریگر اکاؤنٹ ہے۔ کاریگر محلہ ورکر ایپ استعمال کرتے ہیں۔'],
+  err_bad_photo: ["That photo didn't work. Try another.", 'Yeh tasveer nahi chali. Doosri try karein.', 'یہ تصویر نہیں چلی۔ دوسری کوشش کریں۔'],
+  err_photo_too_big: ['That photo is too big. Try another.', 'Tasveer bohat bari hai. Doosri try karein.', 'تصویر بہت بڑی ہے۔ دوسری کوشش کریں۔'],
+  wrongAppTitle: ['This number is a worker account', 'Yeh number worker account hai', 'یہ نمبر کاریگر اکاؤنٹ ہے'],
+  wrongAppHint: ['Workers use the Mohalla Worker app. To hire someone, use a different number.', 'Worker Mohalla Worker app use karte hain. Kisi ko bulane ke liye doosra number likhein.', 'کاریگر محلہ ورکر ایپ استعمال کرتے ہیں۔ کسی کو بلانے کے لیے دوسرا نمبر لکھیں۔'],
+
+  // photos
+  addPhoto: ['Add a photo', 'Tasveer lagayein', 'تصویر لگائیں'],
+  removePhoto: ['Remove photo', 'Tasveer hatayein', 'تصویر ہٹائیں'],
+  uploading: ['Uploading photo…', 'Tasveer upload ho rahi hai…', 'تصویر اپ لوڈ ہو رہی ہے…'],
+  photoProblem: ['A photo of the problem helps', 'Masle ki tasveer se madad milti hai', 'مسئلے کی تصویر سے مدد ملتی ہے'],
+  addProof: ['Add a photo, if you have one', 'Tasveer ho to lagayein', 'تصویر ہو تو لگائیں'],
+
+  // a reported problem, both sides
+  disputeTheirs: ['{name} reported a problem. Tell your side before {time}.', '{name} ne masla bataya. {time} se pehle apni baat batayein.', '{name} نے مسئلہ بتایا۔ {time} سے پہلے اپنی بات بتائیں۔'],
+  yourSide: ['You said', 'Aap ne kaha', 'آپ نے کہا'],
+  theirSide: ['{name} said', '{name} ne kaha', '{name} نے کہا'],
+  tellYourSide: ['Tell your side', 'Apni baat batayein', 'اپنی بات بتائیں'],
+  addMore: ['Add more', 'Aur batayein', 'اور بتائیں'],
+  sendSide: ['Send', 'Bhejein', 'بھیجیں'],
+  rulingAgainst: ['The record went against you. This counts as a strike.', 'Record aap ke khilaf gaya. Yeh ek strike hai.', 'ریکارڈ آپ کے خلاف گیا۔ یہ ایک اسٹرائک ہے۔'],
+  rulingFor: ['The record supports you.', 'Record aap ke haq mein hai.', 'ریکارڈ آپ کے حق میں ہے۔'],
+  rulingNone: ['No one got a strike.', 'Kisi ko strike nahi mili.', 'کسی کو اسٹرائک نہیں ملی۔'],
+  'dt_no-show': ['{name} says you were not there', '{name} kehte hain aap mojood nahi the', '{name} کہتے ہیں آپ موجود نہیں تھے'],
+  'dt_non-payment': ['{name} says they were not paid in full', '{name} kehte hain poori payment nahi hui', '{name} کہتے ہیں پوری ادائیگی نہیں ہوئی'],
+  dt_scope: ['{name} reported a price or work problem', '{name} ne qeemat ya kaam ka masla bataya', '{name} نے قیمت یا کام کا مسئلہ بتایا'],
+  dt_misconduct: ['{name} reported bad behaviour', '{name} ne bad tameezi ki shikayat ki', '{name} نے بدتمیزی کی شکایت کی'],
 
   // ---- request form ----
   quickQs: ['3 quick questions', '3 aasaan sawal', 'تین آسان سوال'],
@@ -232,7 +259,7 @@ const S = {
   priceWaiting: ['A new price is waiting for your OK', 'Nayi qeemat aap ki haan ka intezar kar rahi hai', 'نئی قیمت آپ کی ہاں کا انتظار کر رہی ہے'],
   seeIt: ['See it', 'Dekhein', 'دیکھیں'],
   reportOpen: ['You reported a problem. Mohalla is checking the record.', 'Aap ne masla bataya. Mohalla record check kar raha hai.', 'آپ نے مسئلہ بتایا۔ محلہ ریکارڈ چیک کر رہا ہے۔'],
-  reportClosed: ['Mohalla has decided on your report.', 'Mohalla ne aap ki report par faisla kar diya.', 'محلہ نے آپ کی رپورٹ پر فیصلہ کر دیا۔'],
+  reportClosed: ['Mohalla has decided.', 'Mohalla ne faisla kar diya.', 'محلہ نے فیصلہ کر دیا۔'],
   payMismatch: ['You said {a}, {name} said {b}. If that is wrong, tap "Something wrong?".', 'Aap ne {a} kaha, {name} ne {b}. Ghalat ho to "Koi masla hai?" dabayein.', 'آپ نے {a} کہا، {name} نے {b}۔ غلط ہو تو "کوئی مسئلہ ہے؟" دبائیں۔'],
   youPaid: ['You paid {amount}', 'Aap ne {amount} diye', 'آپ نے {amount} دیے'],
 

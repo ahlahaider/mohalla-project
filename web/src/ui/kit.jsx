@@ -1,12 +1,14 @@
 // Small building blocks every screen reuses. Keeping them here means a
 // button or a label looks and behaves the same everywhere.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   CaretLeft, HouseLine, ClipboardText, Lifebuoy, CircleNotch, WarningCircle,
-  Backspace, Star, MapPin,
+  Backspace, Star, MapPin, Camera, X,
 } from '@phosphor-icons/react';
 import { useLang, AREA_KEYS } from '../i18n.jsx';
+import { uploadPhoto } from '../photos.js';
+import { errorText } from '../api.js';
 
 // English (or Roman Urdu) on top, Urdu script underneath.
 export function Say({ k, vars, className = '' }) {
@@ -170,9 +172,51 @@ export function Keypad({ value, onChange, length = 4, disabled = false }) {
 const AV_COLOURS = ['#fdebc8', '#f8e0d5', '#ddf0e2', '#dcedf6', '#efe0f2', '#f1e1cc'];
 export const initials = (name = '') => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
-export function Avatar({ name, size }) {
+// A person's photo if they added one, otherwise their initials on a soft colour.
+export function Avatar({ name, size, photoUrl }) {
   const colour = AV_COLOURS[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % AV_COLOURS.length];
-  return <span className="avatar" style={{ '--av-bg': colour, ...(size && { '--av': `${size}px` }) }} aria-hidden="true">{initials(name)}</span>;
+  const style = { '--av-bg': colour, ...(size && { '--av': `${size}px` }) };
+  if (photoUrl) return <img className="avatar avatar--photo" src={photoUrl} alt="" style={style} />;
+  return <span className="avatar" style={style} aria-hidden="true">{initials(name)}</span>;
+}
+
+// Add up to `max` photos: opens the camera or gallery on phones, shows small
+// previews with a remove button, and uploads each photo straight away.
+//   photos: ["/api/photos/…"], onChange(newList)
+export function PhotoPicker({ photos, onChange, max = 3, label = 'addPhoto' }) {
+  const L = useLang();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const add = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try { onChange([...photos, await uploadPhoto(file)].slice(0, max)); } catch (err) { setError(err); } finally { setBusy(false); }
+  };
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      {photos.length > 0 && (
+        <div className="photo-row">
+          {photos.map((p) => (
+            <span key={p} className="photo-thumb">
+              <img src={p} alt="" />
+              <button type="button" aria-label={L.t('removePhoto')} onClick={() => onChange(photos.filter((x) => x !== p))}><X size={16} weight="bold" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      {photos.length < max && (
+        <label className="btn btn--ghost btn--small moves" aria-disabled={busy}>
+          <input type="file" accept="image/*" onChange={add} disabled={busy} hidden />
+          {busy ? <CircleNotch size={24} className="spin" /> : <Ico icon={Camera} tone="henna" size={22} box={34} motion="pop" />}
+          <Say k={busy ? 'uploading' : label} />
+        </label>
+      )}
+      {error && <ErrorBox>{errorText(error, L)}</ErrorBox>}
+    </div>
+  );
 }
 
 export function StarsShow({ value, size = 18 }) {

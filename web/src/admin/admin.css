@@ -116,3 +116,7 @@
 .admin .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 
 .admin .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+/* photo thumbnails (bills, evidence) — click to open full size */
+.admin .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.admin .thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; background: #f4f4f4; }

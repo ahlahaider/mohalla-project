@@ -1,0 +1,450 @@
+// Every word in the worker app as [English, Roman Urdu, Urdu script].
+// The main line follows the language toggle (English or Roman Urdu); the Urdu
+// script line sits underneath key labels, exactly like the customer website.
+// Have native speakers check the Urdu before the presentation.
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { store } from './api';
+
+const S = {
+  // ---- general ----
+  loading: ['Loading…', 'Load ho raha hai…', 'لوڈ ہو رہا ہے…'],
+  noInternet: ["Can't reach Mohalla. Check your internet and try again.", 'Mohalla se rabta nahi ho raha. Internet check kar ke dobara koshish karein.', 'محلہ سے رابطہ نہیں ہو رہا۔ انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔'],
+  somethingWentWrong: ['Something went wrong. Try again.', 'Kuch ghalat ho gaya. Dobara koshish karein.', 'کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔'],
+  tryAgain: ['Try again', 'Dobara koshish karein', 'دوبارہ کوشش کریں'],
+  continue: ['Continue', 'Aage chalein', 'آگے چلیں'],
+  next: ['Next', 'Aage', 'آگے'],
+  back: ['Back', 'Wapas', 'واپس'],
+  close: ['Close', 'Band karein', 'بند کریں'],
+  save: ['Save', 'Save karein', 'محفوظ کریں'],
+  done: ['Done', 'Ho gaya', 'ہو گیا'],
+  canSkip: ['you can skip this', 'chhor bhi sakte hain', 'چھوڑ بھی سکتے ہیں'],
+  langButton: ['Roman Urdu', 'English', 'زبان'],
+
+  // ---- bottom navigation ----
+  navJobs: ['Jobs', 'Kaam', 'کام'],
+  navEarnings: ['My earnings', 'Meri kamai', 'میری کمائی'],
+  navHelp: ['Help', 'Madad', 'مدد'],
+
+  // ---- welcome ----
+  tagline: ['More work, close to home', 'Apne ilaqe mein zyada kaam', 'اپنے علاقے میں زیادہ کام'],
+  doorNew: ["I'm new here", 'Main naya hoon', 'میں نیا ہوں'],
+  doorNewHint: ['Make my account', 'Mera account banayein', 'میرا اکاؤنٹ بنائیں'],
+  doorHave: ['I have an account', 'Mera account hai', 'میرا اکاؤنٹ ہے'],
+  doorHaveHint: ['Number and PIN', 'Number aur PIN', 'نمبر اور پن'],
+  doorHelped: ['Someone is helping me', 'Koi meri madad kar raha hai', 'کوئی میری مدد کر رہا ہے'],
+  doorHelpedHint: ['A shop, a friend or family', 'Dukaan, dost ya ghar wale', 'دکان، دوست یا گھر والے'],
+  freeForever: ['Free. No commission, ever.', 'Muft. Kabhi koi commission nahi.', 'مفت۔ کبھی کوئی کمیشن نہیں۔'],
+
+  // ---- log in ----
+  loginTitle: ['Log in with your number', 'Apne number se log in karein', 'اپنے نمبر سے لاگ ان کریں'],
+  phoneOnly: ['Just your mobile number. No email needed.', 'Sirf aap ka mobile number. Email ki zaroorat nahi.', 'صرف آپ کا موبائل نمبر۔ ای میل کی ضرورت نہیں۔'],
+  mobileNumber: ['Mobile number', 'Mobile number', 'موبائل نمبر'],
+  welcomeBack: ['Welcome back!', 'Khush aamdeed!', 'خوش آمدید!'],
+  enterPin: ['Enter your 4-number PIN', 'Apna 4 hindson wala PIN daalein', 'اپنا چار ہندسوں کا پن ڈالیں'],
+  forgotPin: ['Forgot PIN?', 'PIN bhool gaye?', 'پن بھول گئے؟'],
+  changeNumber: ['Change number', 'Number badlein', 'نمبر بدلیں'],
+  noAccount: ['No account with this number yet.', 'Is number ka abhi koi account nahi.', 'اس نمبر کا ابھی کوئی اکاؤنٹ نہیں۔'],
+  noAccountHint: ['Make a new account with it? It takes 2 minutes.', 'Is se naya account banayein? 2 minute lagein ge.', 'اس سے نیا اکاؤنٹ بنائیں؟ 2 منٹ لگیں گے۔'],
+  signupWithThis: ['Sign up with this number', 'Is number se account banayein', 'اس نمبر سے اکاؤنٹ بنائیں'],
+  orTryAnother: ['Use a different number', 'Doosra number likhein', 'دوسرا نمبر لکھیں'],
+  hasAccount: ['This number already has an account.', 'Is number ka account pehle se hai.', 'اس نمبر کا اکاؤنٹ پہلے سے ہے۔'],
+  hasAccountHint: ['Log in with your PIN instead.', 'Apne PIN se log in karein.', 'اپنے پن سے لاگ ان کریں۔'],
+  loginInstead: ['Log in instead', 'Log in karein', 'لاگ ان کریں'],
+  wrongAppTitle: ['This number is a customer account', 'Yeh number customer account hai', 'یہ نمبر کسٹمر اکاؤنٹ ہے'],
+  wrongAppHint: ['Customers use the Mohalla website. To work on Mohalla, use a different number.', 'Customer Mohalla website use karte hain. Kaam karne ke liye doosra number likhein.', 'کسٹمر محلہ ویب سائٹ استعمال کرتے ہیں۔ کام کرنے کے لیے دوسرا نمبر لکھیں۔'],
+  channelQ: ['Where should we send the code?', 'Code kahan bhejein?', 'کوڈ کہاں بھیجیں؟'],
+  channelNote: ['We send a 4-number code to check this number is yours.', 'Hum 4 hindson ka code bhejte hain taake pata chale yeh number aap ka hai.', 'ہم چار ہندسوں کا کوڈ بھیجتے ہیں تاکہ پتہ چلے یہ نمبر آپ کا ہے۔'],
+  resetNote: ['We send a code, then you make a new PIN.', 'Hum code bhejein ge, phir aap naya PIN banayein.', 'ہم کوڈ بھیجیں گے، پھر آپ نیا پن بنائیں۔'],
+  viaWhatsapp: ['WhatsApp', 'WhatsApp', 'واٹس ایپ'],
+  viaWhatsappHint: ['Message on WhatsApp', 'WhatsApp par message', 'واٹس ایپ پر میسج'],
+  viaSms: ['SMS', 'SMS', 'ایس ایم ایس'],
+  viaSmsHint: ['Normal text message', 'Aam text message', 'عام ٹیکسٹ میسج'],
+  enterCode: ['Enter the code', 'Code daalein', 'کوڈ ڈالیں'],
+  codeSentWa: ['We sent a code on WhatsApp to {phone}', 'Humne {phone} par WhatsApp se code bheja hai', 'ہم نے {phone} پر واٹس ایپ سے کوڈ بھیجا ہے'],
+  codeSentSms: ['We sent a code by SMS to {phone}', 'Humne {phone} par SMS se code bheja hai', 'ہم نے {phone} پر ایس ایم ایس سے کوڈ بھیجا ہے'],
+  demoCode: ['Demo: no message is really sent. The code is', 'Demo: asal message nahi bheja gaya. Code hai', 'ڈیمو: اصل میسج نہیں بھیجا گیا۔ کوڈ ہے'],
+  sendAgain: ['Send the code again', 'Code dobara bhejein', 'کوڈ دوبارہ بھیجیں'],
+  sendAgainIn: ['Send again in {n}', '{n} baad dobara bhejein', '{n} بعد دوبارہ بھیجیں'],
+  otherWay: ['Get the code another way', 'Code kisi aur tareeqe se lein', 'کوڈ کسی اور طریقے سے لیں'],
+  makePin: ['Make a 4-number PIN', '4 hindson ka PIN banayein', 'چار ہندسوں کا پن بنائیں'],
+  makePinNote: ['Like your mobile wallet PIN. You will use it every time you log in.', 'Mobile wallet PIN ki tarah. Har dafa log in mein yahi chahiye hoga.', 'موبائل والیٹ پن کی طرح۔ ہر بار لاگ ان میں یہی چاہیے ہوگا۔'],
+  newPin: ['Make a new 4-number PIN', 'Naya 4 hindson ka PIN banayein', 'نیا چار ہندسوں کا پن بنائیں'],
+  repeatPin: ['Enter the same PIN again', 'Wohi PIN dobara daalein', 'وہی پن دوبارہ ڈالیں'],
+  pinMismatch: ['The two PINs were different. Make it again.', 'Dono PIN alag the. Dobara banayein.', 'دونوں پن مختلف تھے۔ دوبارہ بنائیں۔'],
+  deleteKey: ['Delete', 'Mitayein', 'مٹائیں'],
+
+  // ---- sign up ----
+  signupTitle: ['Make your account', 'Apna account banayein', 'اپنا اکاؤنٹ بنائیں'],
+  stepOf: ['Step {n} of 4', 'Qadam {n} / 4', 'قدم {n} از 4'],
+  helperTitle: ['Who is helping?', 'Kaun madad kar raha hai?', 'کون مدد کر رہا ہے؟'],
+  helperNote: ['Fill this in together with the worker. The code goes to the worker’s own phone.', 'Yeh worker ke saath mil kar bharein. Code worker ke apne phone par jayega.', 'یہ کاریگر کے ساتھ مل کر بھریں۔ کوڈ کاریگر کے اپنے فون پر جائے گا۔'],
+  helperName: ['Your name, or the shop’s name', 'Aap ka naam, ya dukaan ka naam', 'آپ کا نام، یا دکان کا نام'],
+  helperPhone: ['Your mobile number', 'Aap ka mobile number', 'آپ کا موبائل نمبر'],
+  helperRelation: ['You are the worker’s…', 'Aap worker ke…', 'آپ کاریگر کے…'],
+  relShop: ['Shop', 'Dukaan', 'دکان'],
+  relFriend: ['Friend', 'Dost', 'دوست'],
+  relFamily: ['Family', 'Ghar wale', 'گھر والے'],
+  workerPhoneQ: ['The worker’s mobile number', 'Worker ka mobile number', 'کاریگر کا موبائل نمبر'],
+  workQ: ['What work do you do?', 'Aap kya kaam karte hain?', 'آپ کیا کام کرتے ہیں؟'],
+  workNote: ['Tap every one you do.', 'Jo jo kaam karte hain sab dabayein.', 'جو جو کام کرتے ہیں سب دبائیں۔'],
+  nextUp2: ['Next: your areas, your price, a 4-number PIN.', 'Aage: aap ke ilaqe, aap ki qeemat, 4 hindson ka PIN.', 'آگے: آپ کے علاقے، آپ کی قیمت، چار ہندسوں کا پن۔'],
+  areasQ: ['Which areas do you work in?', 'Aap kin ilaqon mein kaam karte hain?', 'آپ کن علاقوں میں کام کرتے ہیں؟'],
+  areasNote: ['Tap every area you can go to.', 'Jahan jahan ja sakte hain sab dabayein.', 'جہاں جہاں جا سکتے ہیں سب دبائیں۔'],
+  priceQ: ['Your usual starting price', 'Aap ki aam shuruati qeemat', 'آپ کی عام شروعاتی قیمت'],
+  priceNote: ['Customers see “from Rs …”. For each job you agree the real price in the app.', 'Customer “Rs … se shuru” dekhte hain. Har kaam ki asal qeemat app mein tay hoti hai.', 'کسٹمر “… روپے سے شروع” دیکھتے ہیں۔ ہر کام کی اصل قیمت ایپ میں طے ہوتی ہے۔'],
+  aboutQ: ['About you', 'Aap ke baare mein', 'آپ کے بارے میں'],
+  nameQ: ['Your name, or your shop’s name', 'Aap ka naam, ya dukaan ka naam', 'آپ کا نام، یا دکان کا نام'],
+  nameNote: ['Customers will see this name.', 'Customer yeh naam dekhein ge.', 'کسٹمر یہ نام دیکھیں گے۔'],
+  genderQ: ['Are you a man or a woman?', 'Aap mard hain ya aurat?', 'آپ مرد ہیں یا عورت؟'],
+  genderNote: ['Some customers look for women workers.', 'Kuch customer khawateen worker dhoondte hain.', 'کچھ کسٹمر خواتین کاریگر ڈھونڈتے ہیں۔'],
+  man: ['Man', 'Mard', 'مرد'],
+  woman: ['Woman', 'Aurat', 'عورت'],
+  photoQ: ['Your photo', 'Aap ki tasveer', 'آپ کی تصویر'],
+  photoNote: ['Customers trust a face. You can also add it later.', 'Customer chehra dekh kar bharosa karte hain. Baad mein bhi laga sakte hain.', 'کسٹمر چہرہ دیکھ کر بھروسہ کرتے ہیں۔ بعد میں بھی لگا سکتے ہیں۔'],
+  takePhoto: ['Take photo', 'Tasveer lein', 'تصویر لیں'],
+  choosePhoto: ['From gallery', 'Gallery se', 'گیلری سے'],
+  retake: ['Change photo', 'Tasveer badlein', 'تصویر بدلیں'],
+  nextUp4: ['Last step: a 4-number PIN.', 'Aakhri qadam: 4 hindson ka PIN.', 'آخری قدم: چار ہندسوں کا پن۔'],
+
+  // ---- home ----
+  salaam: ['Salaam, {name}', 'Salaam, {name}', 'السلام علیکم، {name}'],
+  workingToday: ["I'm working today", 'Aaj kaam par hoon', 'آج کام پر ہوں'],
+  workingOnHint: ['Customers can find you. Tap to switch off.', 'Customer aap ko dhoond sakte hain. Band karne ke liye dabayein.', 'کسٹمر آپ کو ڈھونڈ سکتے ہیں۔ بند کرنے کے لیے دبائیں۔'],
+  notWorking: ['Not working today', 'Aaj kaam par nahi', 'آج کام پر نہیں'],
+  workingOffHint: ["Customers can't find you today. Tap to switch on.", 'Aaj customer aap ko nahi dhoond sakte. Chalu karne ke liye dabayein.', 'آج کسٹمر آپ کو نہیں ڈھونڈ سکتے۔ چالو کرنے کے لیے دبائیں۔'],
+  newRequests: ['New request', 'Nayi darkhwast', 'نئی درخواست'],
+  noRequests: ['No new requests right now.', 'Abhi koi nayi darkhwast nahi.', 'ابھی کوئی نئی درخواست نہیں۔'],
+  noRequestsHint: ['We check every few seconds. Keep “working today” on so customers find you.', 'Hum har thori der baad check karte hain. “Aaj kaam par hoon” chalu rakhein.', 'ہم ہر تھوڑی دیر بعد چیک کرتے ہیں۔ “آج کام پر ہوں” چالو رکھیں۔'],
+  left: ['left', 'baqi', 'باقی'],
+  seeRequest: ['See request', 'Dekhein', 'دیکھیں'],
+  myJobs: ['My jobs', 'Meray kaam', 'میرے کام'],
+  noJobs: ['No jobs going on.', 'Abhi koi kaam nahi chal raha.', 'ابھی کوئی کام نہیں چل رہا۔'],
+  finishedInEarnings: ['Finished jobs are in My earnings.', 'Mukammal kaam “Meri kamai” mein hain.', 'مکمل کام “میری کمائی” میں ہیں۔'],
+  w_yourTurn: ['Your turn: send price', 'Aap ki baari: qeemat bhejein', 'آپ کی باری: قیمت بھیجیں'],
+  w_waitingOk: ['Waiting for OK', 'Haan ka intezar', 'ہاں کا انتظار'],
+  w_doWork: ['Price agreed: do the work', 'Qeemat tay: kaam karein', 'قیمت طے: کام کریں'],
+  w_confirmCash: ['Work done: confirm cash', 'Kaam mukammal: cash tasdeeq karein', 'کام مکمل: نقد کی تصدیق کریں'],
+  w_rate: ['Rate the customer', 'Customer ko rating dein', 'کسٹمر کو ریٹنگ دیں'],
+  w_done: ['Finished', 'Mukammal', 'مکمل'],
+  w_cancelled: ['Cancelled', 'Mansookh', 'منسوخ'],
+  w_declined: ['You said no', 'Aap ne mana kiya', 'آپ نے منع کیا'],
+  w_expired: ['Time ran out', 'Waqt khatam', 'وقت ختم'],
+
+  // ---- new request ----
+  newRequest: ['New request', 'Nayi darkhwast', 'نئی درخواست'],
+  answerWithin: ['Answer within {time}', '{time} mein jawab dein', '{time} میں جواب دیں'],
+  hoursMins: ['{h} h {m} min', '{h} ghante {m} minute', '{h} گھنٹے {m} منٹ'],
+  mins: ['{m} min', '{m} minute', '{m} منٹ'],
+  hours: ['{h} hours', '{h} ghante', '{h} گھنٹے'],
+  workersRating: ["workers' rating", 'workers ki rating', 'کاریگروں کی ریٹنگ'],
+  noRatingYet: ['no rating yet', 'abhi rating nahi', 'ابھی ریٹنگ نہیں'],
+  paidInFull: ['paid in full', 'poori payment', 'پوری ادائیگی'],
+  newCustomer: ['New customer', 'Naya customer', 'نیا کسٹمر'],
+  newCustomerHint: ['First job on Mohalla', 'Mohalla par pehla kaam', 'محلہ پر پہلا کام'],
+  whatsWrong: ["What's wrong", 'Kya masla hai', 'کیا مسئلہ ہے'],
+  addressAfterYes: ['Full address after you say yes', 'Haan karne ke baad poora pata', 'ہاں کرنے کے بعد پورا پتہ'],
+  yesGo: ["Yes, I'll go", 'Haan, main jaunga', 'ہاں، میں جاؤں گا'],
+  noCant: ["No, can't go", 'Nahi ja sakta', 'نہیں جا سکتا'],
+  declineQ: ['Say no to this job?', 'Is kaam ko mana karein?', 'اس کام کو منع کریں؟'],
+  declineNote: ['{name} will be told, so they can ask someone else.', '{name} ko bata diya jayega taake woh kisi aur ko bula sakein.', '{name} کو بتا دیا جائے گا تاکہ وہ کسی اور کو بلا سکیں۔'],
+  yesDecline: ['Yes, say no', 'Haan, mana karein', 'ہاں، منع کریں'],
+  goBack: ['Go back', 'Wapas', 'واپس'],
+  requestClosed: ['This request is not open any more.', 'Yeh darkhwast ab khuli nahi.', 'یہ درخواست اب کھلی نہیں۔'],
+  requestExpired: ['Time ran out for this request.', 'Is darkhwast ka waqt khatam ho gaya.', 'اس درخواست کا وقت ختم ہو گیا۔'],
+  backToJobs: ['Back to jobs', 'Kaam par wapas', 'کام پر واپس'],
+
+  // ---- job page ----
+  call: ['Call', 'Call', 'کال'],
+  whatsapp: ['WhatsApp', 'WhatsApp', 'واٹس ایپ'],
+  map: ['Map', 'Naqsha', 'نقشہ'],
+  fourSteps: ['4 steps', '4 qadam', 'چار قدم'],
+  agreedLabel: ['Agreed', 'Tay', 'طے'],
+  plusWaiting: ['+ {amount} waiting', '+ {amount} intezar mein', '+ {amount} انتظار میں'],
+  theProblem: ['The problem', 'Masla', 'مسئلہ'],
+  s1: ['Visit charge', 'Aane ka kharcha', 'آنے کا خرچہ'],
+  s1Sub: ['For coming and checking the problem.', 'Aa kar masla dekhne ke liye.', 'آ کر مسئلہ دیکھنے کے لیے۔'],
+  s1Send: ['Send visit charge', 'Aane ka kharcha bhejein', 'آنے کا خرچہ بھیجیں'],
+  s1Skip: ['No visit charge: send full price', 'Aane ka kharcha nahi: poori qeemat bhejein', 'آنے کا خرچہ نہیں: پوری قیمت بھیجیں'],
+  s1Skipped: ['No visit charge', 'Aane ka kharcha nahi', 'آنے کا خرچہ نہیں'],
+  s2: ['Full work price', 'Poore kaam ki qeemat', 'پورے کام کی قیمت'],
+  s2Sub: ['Check the problem, then tell {name} the full price.', 'Masla dekh kar {name} ko poori qeemat batayein.', 'مسئلہ دیکھ کر {name} کو پوری قیمت بتائیں۔'],
+  s2Send: ['Send price', 'Qeemat bhejein', 'قیمت بھیجیں'],
+  s3: ['Do the work', 'Kaam karein', 'کام کریں'],
+  s3Sub: ['Need a part? Add it with a photo of the bill.', 'Purza chahiye? Bill ki tasveer ke saath daalein.', 'پرزہ چاہیے؟ بل کی تصویر کے ساتھ ڈالیں۔'],
+  addPart: ['Add part', 'Purza daalein', 'پرزہ ڈالیں'],
+  addExtra: ['Extra work', 'Izafi kaam', 'اضافی کام'],
+  s4: ['Get paid in cash', 'Cash wusool karein', 'نقد وصول کریں'],
+  s4Sub: ['When {name} says the work is done.', 'Jab {name} kahein kaam ho gaya.', 'جب {name} کہیں کام ہو گیا۔'],
+  s4Now: ['{name} says the work is done.', '{name} ne kaha kaam ho gaya.', '{name} نے کہا کام ہو گیا۔'],
+  confirmCash: ['Confirm cash', 'Cash tasdeeq karein', 'نقد کی تصدیق کریں'],
+  youGot: ['You got {amount}', 'Aap ko {amount} mile', 'آپ کو {amount} ملے'],
+  rateName: ['Rate {name}', '{name} ko rating dein', '{name} کو ریٹنگ دیں'],
+  youRated: ['You rated {name}', 'Aap ne {name} ko rating di', 'آپ نے {name} کو ریٹنگ دی'],
+  saidOk: ['{name} said OK', '{name} ne haan ki', '{name} نے ہاں کی'],
+  waitingFor: ['Waiting for {name}’s OK', '{name} ki haan ka intezar', '{name} کی ہاں کا انتظار'],
+  saidNo: ['{name} said No', '{name} ne mana kiya', '{name} نے منع کیا'],
+  sendNew: ['Send a new price', 'Nayi qeemat bhejein', 'نئی قیمت بھیجیں'],
+  e_visit: ['Visit charge', 'Aane ka kharcha', 'آنے کا خرچہ'],
+  e_quote: ['Full work price', 'Poore kaam ki qeemat', 'پورے کام کی قیمت'],
+  e_amendment: ['Extra work', 'Izafi kaam', 'اضافی کام'],
+  e_part: ['Part', 'Purza', 'پرزہ'],
+  billTitle: ['Shop bill', 'Dukaan ka bill', 'دکان کا بل'],
+  problemQ: ['Problem?', 'Masla?', 'مسئلہ؟'],
+  cancelJob: ['Cancel job', 'Kaam mansookh karein', 'کام منسوخ کریں'],
+  cancelQ: ['Cancel this job?', 'Yeh kaam mansookh karein?', 'یہ کام منسوخ کریں؟'],
+  cancelNote: ['{name} will see that you cancelled. This cannot be undone.', '{name} dekhein ge ke aap ne mansookh kiya. Yeh wapas nahi hoga.', '{name} دیکھیں گے کہ آپ نے منسوخ کیا۔ یہ واپس نہیں ہوگا۔'],
+  yesCancel: ['Yes, cancel', 'Haan, mansookh karein', 'ہاں، منسوخ کریں'],
+  keepJob: ['No, keep it', 'Nahi, rehne dein', 'نہیں، رہنے دیں'],
+  jobCancelled: ['This job was cancelled.', 'Yeh kaam mansookh ho gaya.', 'یہ کام منسوخ ہو گیا۔'],
+  jobDeclined: ['You said no to this job.', 'Aap ne is kaam ko mana kiya.', 'آپ نے اس کام کو منع کیا۔'],
+  jobFinished: ['Job finished. Shukriya!', 'Kaam mukammal. Shukriya!', 'کام مکمل۔ شکریہ!'],
+
+  // ---- reported problems on the job page ----
+  disputeMine: ['You reported a problem. Mohalla is checking the price record.', 'Aap ne masla bataya. Mohalla record check kar raha hai.', 'آپ نے مسئلہ بتایا۔ محلہ ریکارڈ چیک کر رہا ہے۔'],
+  disputeTheirs: ['{name} reported a problem. Tell your side before {time}.', '{name} ne masla bataya. {time} se pehle apni baat batayein.', '{name} نے مسئلہ بتایا۔ {time} سے پہلے اپنی بات بتائیں۔'],
+  yourSide: ['You said', 'Aap ne kaha', 'آپ نے کہا'],
+  theirSide: ['{name} said', '{name} ne kaha', '{name} نے کہا'],
+  tellYourSide: ['Tell your side', 'Apni baat batayein', 'اپنی بات بتائیں'],
+  addMore: ['Add more', 'Aur batayein', 'اور بتائیں'],
+  send: ['Send', 'Bhejein', 'بھیجیں'],
+  disputeDecided: ['Mohalla has decided.', 'Mohalla ne faisla kar diya.', 'محلہ نے فیصلہ کر دیا۔'],
+  rulingAgainst: ['The record went against you. This counts as a strike.', 'Record aap ke khilaf gaya. Yeh ek strike hai.', 'ریکارڈ آپ کے خلاف گیا۔ یہ ایک اسٹرائک ہے۔'],
+  rulingFor: ['The record supports you.', 'Record aap ke haq mein hai.', 'ریکارڈ آپ کے حق میں ہے۔'],
+  rulingNone: ['No one got a strike.', 'Kisi ko strike nahi mili.', 'کسی کو اسٹرائک نہیں ملی۔'],
+
+  // ---- price screens ----
+  priceVisitTitle: ['Visit charge', 'Aane ka kharcha', 'آنے کا خرچہ'],
+  priceQuoteTitle: ['Full work price', 'Poore kaam ki qeemat', 'پورے کام کی قیمت'],
+  priceExtraTitle: ['Extra work', 'Izafi kaam', 'اضافی کام'],
+  forWhat: ['For: {what}', 'Kis liye: {what}', 'کس لیے: {what}'],
+  extraWhat: ['What is the extra work?', 'Izafi kaam kya hai?', 'اضافی کام کیا ہے؟'],
+  extraExample: ['e.g. second fan, longer pipe', 'maslan doosra pankha, lamba pipe', 'مثلاً دوسرا پنکھا، لمبا پائپ'],
+  willSee: ['{name} will see: {what} {amount}. They tap OK or No.', '{name} dekhein ge: {what} {amount}. Woh haan ya na karein ge.', '{name} دیکھیں گے: {what} {amount}۔ وہ ہاں یا نہ کریں گے۔'],
+  sendTo: ['Send to {name}', '{name} ko bhejein', '{name} کو بھیجیں'],
+
+  // ---- add a part ----
+  addPartTitle: ['Add a part', 'Purza daalein', 'پرزہ ڈالیں'],
+  billPhoto: ['Photo of the bill', 'Bill ki tasveer', 'بل کی تصویر'],
+  tapToPhoto: ['Tap to take photo', 'Tasveer lene ke liye dabayein', 'تصویر لینے کے لیے دبائیں'],
+  whatPart: ['What part?', 'Kaun sa purza?', 'کون سا پرزہ؟'],
+  partName: ['Name of the part', 'Purze ka naam', 'پرزے کا نام'],
+  howMuch: ['How much?', 'Kitne ka?', 'کتنے کا؟'],
+  partOther: ['Something else', 'Kuch aur', 'کچھ اور'],
+  partNote: ['{name} sees the bill photo before saying OK. This protects you both.', '{name} haan karne se pehle bill ki tasveer dekhein ge. Is se dono ki hifazat hai.', '{name} ہاں کرنے سے پہلے بل کی تصویر دیکھیں گے۔ اس سے دونوں کی حفاظت ہے۔'],
+  uploading: ['Uploading photo…', 'Tasveer upload ho rahi hai…', 'تصویر اپ لوڈ ہو رہی ہے…'],
+
+  // ---- got paid, rate the customer ----
+  workDone: ['Work done', 'Kaam mukammal', 'کام مکمل'],
+  workDoneSub: ['{name} says the work is done. Two last taps.', '{name} ne kaha kaam ho gaya. Bas do tap.', '{name} نے کہا کام ہو گیا۔ بس دو ٹیپ۔'],
+  cashQ: ['Did you get the cash?', 'Kya paise mil gaye?', 'کیا پیسے مل گئے؟'],
+  agreedPrice: ['Agreed price', 'Tay shuda qeemat', 'طے شدہ قیمت'],
+  yesGot: ['Yes, got {amount}', 'Haan, {amount} mil gaye', 'ہاں، {amount} مل گئے'],
+  gotDifferent: ['Got a different amount', 'Alag raqam mili', 'الگ رقم ملی'],
+  typeGot: ['Type what you got (Rs)', 'Jitna mila woh likhein (Rs)', 'جتنا ملا وہ لکھیں (روپے)'],
+  lessNote: ['You got less than agreed. You can report it to Mohalla.', 'Tay se kam mile. Aap Mohalla ko bata sakte hain.', 'طے سے کم ملے۔ آپ محلہ کو بتا سکتے ہیں۔'],
+  reportIt: ['Report a problem', 'Masla batayein', 'مسئلہ بتائیں'],
+  howWas: ['How was {name}?', '{name} kaise rahe?', '{name} کیسے رہے؟'],
+  tapStar: ['Tap a star', 'Star dabayein', 'ستارہ دبائیں'],
+  star1: ['Very bad', 'Bohat bura', 'بہت برا'],
+  star2: ['Not good', 'Acha nahi', 'اچھا نہیں'],
+  star3: ['OK', 'Theek', 'ٹھیک'],
+  star4: ['Good', 'Acha', 'اچھا'],
+  star5: ['Very good!', 'Bohat acha!', 'بہت اچھا!'],
+  ratingHidden: ['{name} sees your stars only after rating you too.', '{name} aap ke stars tab dekhein ge jab woh bhi aap ko rating dein.', '{name} آپ کے ستارے تب دیکھیں گے جب وہ بھی آپ کو ریٹنگ دیں۔'],
+  thanks: ['Shukriya!', 'Shukriya!', 'شکریہ!'],
+  thanksNote: ['The job is saved in My earnings.', 'Kaam “Meri kamai” mein save ho gaya.', 'کام “میری کمائی” میں محفوظ ہو گیا۔'],
+
+  // ---- report a problem ----
+  problemTitle: ['What went wrong?', 'Kya ghalat hua?', 'کیا غلط ہوا؟'],
+  problemSub: ['Mohalla decides by checking the price record.', 'Mohalla price record dekh kar faisla karta hai.', 'محلہ قیمت کا ریکارڈ دیکھ کر فیصلہ کرتا ہے۔'],
+  'd_no-show': ['{name} was not there', '{name} mojood nahi the', '{name} موجود نہیں تھے'],
+  'd_non-payment': ['Not paid, or paid less', 'Paise nahi mile ya kam mile', 'پیسے نہیں ملے یا کم ملے'],
+  d_scope: ['Price or work problem', 'Qeemat ya kaam ka masla', 'قیمت یا کام کا مسئلہ'],
+  d_misconduct: ['Bad behaviour or unsafe', 'Bad tameezi ya khatra', 'بدتمیزی یا خطرہ'],
+  'dt_no-show': ['{name} says you did not come', '{name} kehte hain aap nahi aaye', '{name} کہتے ہیں آپ نہیں آئے'],
+  'dt_non-payment': ['{name} reported a payment problem', '{name} ne paison ka masla bataya', '{name} نے پیسوں کا مسئلہ بتایا'],
+  dt_scope: ['{name} reported a price or work problem', '{name} ne qeemat ya kaam ka masla bataya', '{name} نے قیمت یا کام کا مسئلہ بتایا'],
+  dt_misconduct: ['{name} reported bad behaviour', '{name} ne bad tameezi ki shikayat ki', '{name} نے بدتمیزی کی شکایت کی'],
+  tellWhat: ['Tell us what happened', 'Batayein kya hua', 'بتائیں کیا ہوا'],
+  addProof: ['Add a photo, if you have one', 'Tasveer ho to lagayein', 'تصویر ہو تو لگائیں'],
+  misconductNote: ["For your safety, {name}'s account is paused straight away while Mohalla checks. If you are in danger, call 15.", 'Aap ki hifazat ke liye {name} ka account foran rok diya jata hai. Khatra ho to 15 par call karein.', 'آپ کی حفاظت کے لیے {name} کا اکاؤنٹ فوراً روک دیا جاتا ہے۔ خطرہ ہو تو 15 پر کال کریں۔'],
+  sendReport: ['Send to Mohalla', 'Mohalla ko bhejein', 'محلہ کو بھیجیں'],
+  within48: ['You can report up to 48 hours after the job.', 'Kaam ke 48 ghante tak bata sakte hain.', 'کام کے 48 گھنٹے تک بتا سکتے ہیں۔'],
+  reportSent: ['Sent. Mohalla will check the record.', 'Bhej diya. Mohalla record check kare ga.', 'بھیج دیا۔ محلہ ریکارڈ چیک کرے گا۔'],
+
+  // ---- my earnings ----
+  thisWeek: ['This week', 'Is hafte', 'اس ہفتے'],
+  thisMonth: ['This month', 'Is mahine', 'اس مہینے'],
+  cashYouGot: ['Cash you got', 'Aap ko mila cash', 'آپ کو ملا نقد'],
+  jobsWord: ['jobs', 'kaam', 'کام'],
+  ratedYou: ['{n} rated you', '{n} ne rating di', '{n} نے ریٹنگ دی'],
+  noRatings: ['no ratings yet', 'abhi rating nahi', 'ابھی ریٹنگ نہیں'],
+  jobsFinished: ['jobs finished', 'kaam mukammal', 'کام مکمل'],
+  onTime: ['on time', 'waqt par', 'وقت پر'],
+  lastJobs: ['Last jobs', 'Pichhle kaam', 'پچھلے کام'],
+  paidMark: ['paid', 'mil gaya', 'مل گیا'],
+  noFinished: ['No finished jobs yet. They will show here.', 'Abhi koi mukammal kaam nahi. Yahan nazar aayen ge.', 'ابھی کوئی مکمل کام نہیں۔ یہاں نظر آئیں گے۔'],
+  trustNew: ['Trust a new worker', 'Naye worker ki zamanat dein', 'نئے کاریگر کی ضمانت دیں'],
+  vouchLeft: ['You can vouch for {n} more people.', 'Aap {n} aur logon ki zamanat de sakte hain.', 'آپ {n} اور لوگوں کی ضمانت دے سکتے ہیں۔'],
+  vouchFull: ['You vouch for {n} people, the most allowed.', 'Aap {n} logon ki zamanat de rahe hain, yahi hadd hai.', 'آپ {n} لوگوں کی ضمانت دے رہے ہیں، یہی حد ہے۔'],
+  vouchLocked: ['After {n} more finished jobs you can vouch for new workers.', '{n} aur kaam mukammal karne ke baad aap naye workers ki zamanat de sakte hain.', '{n} اور کام مکمل کرنے کے بعد آپ نئے کاریگروں کی ضمانت دے سکتے ہیں۔'],
+  vouchRate: ['You can vouch once 9 in 10 of your accepted jobs are finished.', 'Jab aap ke 10 mein se 9 kaam mukammal hon tab zamanat de sakte hain.', 'جب آپ کے 10 میں سے 9 کام مکمل ہوں تب ضمانت دے سکتے ہیں۔'],
+  vouchRevoked: ['Vouching was removed after two warnings.', 'Do warning ke baad zamanat ka haq khatam ho gaya.', 'دو وارننگ کے بعد ضمانت کا حق ختم ہو گیا۔'],
+
+  // ---- vouch ----
+  vouchTitle: ['Vouch for a worker', 'Worker ki zamanat dein', 'کاریگر کی ضمانت دیں'],
+  vouchExplain: ['Your name goes on them. Customers see “Trusted by {name}”.', 'Aap ka naam un ke saath lagta hai. Customer “{name} in par bharosa karte hain” dekhte hain.', 'آپ کا نام ان کے ساتھ لگتا ہے۔ کسٹمر “{name} ان پر بھروسہ کرتے ہیں” دیکھتے ہیں۔'],
+  vouchRisk: ['If they get a strike in their first 10 jobs, you get a warning. Two warnings and you can no longer vouch.', 'Agar unhein pehle 10 kaam mein strike mile to aap ko warning milegi. Do warning ke baad zamanat nahi de sakein ge.', 'اگر انہیں پہلے 10 کام میں اسٹرائک ملے تو آپ کو وارننگ ملے گی۔ دو وارننگ کے بعد ضمانت نہیں دے سکیں گے۔'],
+  theirPhone: ['Their mobile number', 'Un ka mobile number', 'ان کا موبائل نمبر'],
+  vouchBtn: ['Vouch for them', 'Zamanat dein', 'ضمانت دیں'],
+  vouchDone: ['You now vouch for {name}.', 'Aap ne {name} ki zamanat de di.', 'آپ نے {name} کی ضمانت دے دی۔'],
+  youVouchFor: ['You vouch for', 'Aap in ki zamanat dete hain', 'آپ ان کی ضمانت دیتے ہیں'],
+  takeBack: ['Take back', 'Wapas lein', 'واپس لیں'],
+
+  // ---- help ----
+  howTitle: ['How Mohalla works for you', 'Mohalla aap ke liye kaise kaam karta hai', 'محلہ آپ کے لیے کیسے کام کرتا ہے'],
+  hw1: ['Keep “working today” on so customers find you', '“Aaj kaam par hoon” chalu rakhein taake customer aap ko dhoondein', '“آج کام پر ہوں” چالو رکھیں تاکہ کسٹمر آپ کو ڈھونڈیں'],
+  hw2: ['Answer each request within 4 hours', 'Har darkhwast ka 4 ghante mein jawab dein', 'ہر درخواست کا 4 گھنٹے میں جواب دیں'],
+  hw3: ['Agree every price in the app. Parts need a bill photo.', 'Har qeemat app mein tay karein. Purze ke liye bill ki tasveer.', 'ہر قیمت ایپ میں طے کریں۔ پرزے کے لیے بل کی تصویر۔'],
+  hw4: ['Get paid in cash when the work is done', 'Kaam ke baad cash lein', 'کام کے بعد نقد لیں'],
+  rulesTitle: ['Fair rules', 'Insaaf ke usool', 'انصاف کے اصول'],
+  rule1: ['No commission. Mohalla never takes a cut.', 'Koi commission nahi. Mohalla kuch nahi kaat-ta.', 'کوئی کمیشن نہیں۔ محلہ کچھ نہیں کاٹتا۔'],
+  rule2: ['You rate customers and they rate you. Stars show once both have rated.', 'Aap customer ko rating dete hain aur woh aap ko. Dono ke baad stars nazar aate hain.', 'آپ کسٹمر کو ریٹنگ دیتے ہیں اور وہ آپ کو۔ دونوں کے بعد ستارے نظر آتے ہیں۔'],
+  rule3: ['Problems are decided from the price record in the app.', 'Masle app ke price record se tay hote hain.', 'مسئلے ایپ کے قیمت ریکارڈ سے طے ہوتے ہیں۔'],
+  helpCall: ['Call Mohalla', 'Mohalla ko call karein', 'محلہ کو کال کریں'],
+  helpNoPhone: ['Our help line number will be added here.', 'Hamara help line number yahan aayega.', 'ہمارا ہیلپ لائن نمبر یہاں آئے گا۔'],
+  language: ['Language', 'Zabaan', 'زبان'],
+
+  // ---- my profile ----
+  profileTitle: ['My profile', 'Meri profile', 'میری پروفائل'],
+  myWork: ['My work', 'Mera kaam', 'میرا کام'],
+  myAreas: ['My areas', 'Meray ilaqe', 'میرے علاقے'],
+  startingPrice: ['Starting price', 'Shuruati qeemat', 'شروعاتی قیمت'],
+  saveChanges: ['Save changes', 'Tabdeeli save karein', 'تبدیلی محفوظ کریں'],
+  savedOk: ['Saved', 'Save ho gaya', 'محفوظ ہو گیا'],
+  helpedBy: ['Set up with help from {name}', '{name} ki madad se banaya', '{name} کی مدد سے بنایا'],
+  logout: ['Log out', 'Log out', 'لاگ آؤٹ'],
+
+  // ---- when ----
+  today: ['Today', 'Aaj', 'آج'],
+  tomorrow: ['Tomorrow', 'Kal', 'کل'],
+  yesterday: ['Yesterday', 'Kal (guzra)', 'گزشتہ کل'],
+  morning: ['Morning 9 – 12', 'Subah 9 – 12', 'صبح 9 – 12'],
+  afternoon: ['Afternoon 12 – 4', 'Dopehar 12 – 4', 'دوپہر 12 – 4'],
+  evening: ['Evening 4 – 8', 'Shaam 4 – 8', 'شام 4 – 8'],
+
+  // ---- errors from the API (by code) ----
+  err_bad_phone: ['Enter a mobile number like 0300 1234567', 'Mobile number aise likhein: 0300 1234567', 'موبائل نمبر ایسے لکھیں: 0300 1234567'],
+  err_pin_wrong: ['Wrong PIN. {n} tries left.', 'Ghalat PIN. {n} koshishein baqi.', 'غلط پن۔ {n} کوششیں باقی۔'],
+  err_pin_locked: ['Too many wrong PINs. Try again in {n} minutes, or tap “Forgot PIN?”.', 'Bohat ghalat PIN. {n} minute baad koshish karein, ya “PIN bhool gaye?” dabayein.', 'بہت غلط پن۔ {n} منٹ بعد کوشش کریں، یا “پن بھول گئے؟” دبائیں۔'],
+  err_otp_wrong: ['That code is not right. {n} tries left.', 'Code ghalat hai. {n} koshishein baqi.', 'کوڈ غلط ہے۔ {n} کوششیں باقی۔'],
+  err_otp_expired: ['This code expired. Ask for a new one.', 'Code ki muddat khatam. Naya code mangwayein.', 'کوڈ کی مدت ختم۔ نیا کوڈ منگوائیں۔'],
+  err_otp_too_many: ['Too many wrong codes. Ask for a new one.', 'Bohat ghalat code. Naya code mangwayein.', 'بہت غلط کوڈ۔ نیا کوڈ منگوائیں۔'],
+  err_otp_wait: ['Wait {n} seconds before asking again.', '{n} second intezar karein.', '{n} سیکنڈ انتظار کریں۔'],
+  err_otp_send_failed: ["We couldn't send the WhatsApp message. Try again, or choose SMS.", 'WhatsApp message nahi gaya. Dobara koshish karein ya SMS chunein.', 'واٹس ایپ میسج نہیں گیا۔ دوبارہ کوشش کریں یا ایس ایم ایس چنیں۔'],
+  err_already_registered: ['This number already has an account. Enter your PIN.', 'Is number ka account pehle se hai. PIN daalein.', 'اس نمبر کا اکاؤنٹ پہلے سے ہے۔ پن ڈالیں۔'],
+  err_not_registered: ['No account with this number yet.', 'Is number ka abhi koi account nahi.', 'اس نمبر کا ابھی کوئی اکاؤنٹ نہیں۔'],
+  err_wrong_app: ['This number is a customer account. Customers use the Mohalla website.', 'Yeh number customer account hai. Customer Mohalla website use karte hain.', 'یہ نمبر کسٹمر اکاؤنٹ ہے۔ کسٹمر محلہ ویب سائٹ استعمال کرتے ہیں۔'],
+  err_no_name: ['Enter your name', 'Apna naam likhein', 'اپنا نام لکھیں'],
+  err_banned: ['This account is blocked.', 'Yeh account band hai.', 'یہ اکاؤنٹ بند ہے۔'],
+  err_no_skills: ['Choose the work you do', 'Apna kaam chunein', 'اپنا کام چنیں'],
+  err_no_areas: ['Choose the areas you work in', 'Apne ilaqe chunein', 'اپنے علاقے چنیں'],
+  err_bad_price: ['Enter your price in rupees', 'Qeemat rupay mein likhein', 'قیمت روپے میں لکھیں'],
+  err_bad_helper_phone: ["The helper's number doesn't look right", 'Madadgaar ka number theek nahi lag raha', 'مددگار کا نمبر ٹھیک نہیں لگ رہا'],
+  err_bad_photo: ["That photo didn't work. Try another.", 'Yeh tasveer nahi chali. Doosri try karein.', 'یہ تصویر نہیں چلی۔ دوسری کوشش کریں۔'],
+  err_photo_too_big: ['That photo is too big. Try another.', 'Tasveer bohat bari hai. Doosri try karein.', 'تصویر بہت بڑی ہے۔ دوسری کوشش کریں۔'],
+  err_no_bill_photo: ['Add a photo of the bill first', 'Pehle bill ki tasveer lagayein', 'پہلے بل کی تصویر لگائیں'],
+  err_no_camera_permission: ['Allow the camera in your phone settings, or choose from the gallery.', 'Phone settings mein camera ki ijazat dein, ya gallery se chunein.', 'فون سیٹنگز میں کیمرے کی اجازت دیں، یا گیلری سے چنیں۔'],
+  err_no_worker: ['No worker with this number.', 'Is number ka koi worker nahi.', 'اس نمبر کا کوئی کاریگر نہیں۔'],
+  err_vouch_self: ["You can't vouch for yourself.", 'Apni zamanat khud nahi de sakte.', 'اپنی ضمانت خود نہیں دے سکتے۔'],
+  err_vouch_already: ['You already vouch for this worker.', 'Aap pehle se is worker ki zamanat de rahe hain.', 'آپ پہلے سے اس کاریگر کی ضمانت دے رہے ہیں۔'],
+  err_vouch_not_allowed: ['You can’t vouch yet.', 'Abhi zamanat nahi de sakte.', 'ابھی ضمانت نہیں دے سکتے۔'],
+};
+
+// The 8 services. Keys must match CATEGORIES in api/src/lib/rules.js.
+const CATEGORY = {
+  plumber: ['Plumber', 'Plumber', 'پلمبر'],
+  electrician: ['Electrician', 'Bijli wala', 'الیکٹریشن'],
+  cleaner: ['Cleaner', 'Safai', 'صفائی'],
+  carpenter: ['Carpenter', 'Barhai', 'بڑھئی'],
+  'ac-technician': ['AC repair', 'AC wala', 'اے سی مرمت'],
+  painter: ['Painter', 'Rang saaz', 'رنگ ساز'],
+  mechanic: ['Mechanic', 'Mistri', 'مکینک'],
+  fumigator: ['Pest control', 'Keeray maar spray', 'کیڑے مار اسپرے'],
+};
+
+// The problem chips customers pick on the website (same list as web/src/i18n.jsx),
+// so the worker sees the same words, in their own language.
+export const PROBLEMS = {
+  plumber: [['Tap leaking', 'Nalka tapak raha hai', 'نلکا ٹپک رہا ہے'], ['Pipe leaking', 'Pipe leak', 'پائپ لیک'], ['Drain blocked', 'Nali band hai', 'نالی بند ہے'], ['Tank or motor', 'Tanki ya motor', 'ٹینکی یا موٹر']],
+  electrician: [['Fan not working', 'Pankha nahi chal raha', 'پنکھا نہیں چل رہا'], ['Light or switch', 'Light ya switch', 'لائٹ یا سوئچ'], ['Wiring', 'Wiring', 'وائرنگ'], ['Power keeps going', 'Bijli baar baar jaati hai', 'بجلی بار بار جاتی ہے']],
+  cleaner: [['Full house', 'Poora ghar', 'پورا گھر'], ['Kitchen', 'Kitchen', 'کچن'], ['Bathroom', 'Bathroom', 'باتھ روم'], ['Sofa or carpet', 'Sofa ya qaleen', 'صوفہ یا قالین']],
+  carpenter: [['Door or lock', 'Darwaza ya taala', 'دروازہ یا تالا'], ['Cupboard', 'Almari', 'الماری'], ['Bed or chair repair', 'Bed ya kursi ki marammat', 'بیڈ یا کرسی کی مرمت'], ['New furniture', 'Naya furniture', 'نیا فرنیچر']],
+  'ac-technician': [['AC not cooling', 'AC thanda nahi kar raha', 'اے سی ٹھنڈا نہیں کر رہا'], ['AC service', 'AC service', 'اے سی سروس'], ['Gas refill', 'Gas bharwani hai', 'گیس بھروانی ہے'], ['Water dripping', 'Paani tapak raha hai', 'پانی ٹپک رہا ہے']],
+  painter: [['One room', 'Ek kamra', 'ایک کمرہ'], ['Full house', 'Poora ghar', 'پورا گھر'], ['Damp walls', 'Seelan', 'سیلن'], ['Doors and grills', 'Darwaze aur grill', 'دروازے اور گرل']],
+  mechanic: [["Car won't start", 'Gaari start nahi ho rahi', 'گاڑی اسٹارٹ نہیں ہو رہی'], ['Bike repair', 'Bike ki marammat', 'بائیک کی مرمت'], ['Oil change', 'Oil change', 'آئل چینج'], ['Battery', 'Battery', 'بیٹری']],
+  fumigator: [['Cockroaches', 'Lal baig', 'لال بیگ'], ['Termites', 'Deemak', 'دیمک'], ['Mosquitoes', 'Machar', 'مچھر'], ['Bed bugs', 'Khatmal', 'کھٹمل']],
+};
+
+// Common parts per service, for quick chips on "Add a part".
+export const PARTS = {
+  plumber: [['Tap', 'Nalka', 'نلکا'], ['Pipe', 'Pipe', 'پائپ'], ['Valve', 'Valve', 'والو'], ['Motor part', 'Motor ka purza', 'موٹر کا پرزہ']],
+  electrician: [['Capacitor', 'Capacitor', 'کپیسیٹر'], ['Fan regulator', 'Pankhe ka regulator', 'پنکھے کا ریگولیٹر'], ['Wire', 'Taar', 'تار'], ['Switch', 'Switch', 'سوئچ']],
+  cleaner: [['Cleaning liquid', 'Safai ka liquid', 'صفائی کا مائع'], ['Brush', 'Brush', 'برش'], ['Cloths', 'Kapre', 'کپڑے'], ['Bin bags', 'Kachre ke thaile', 'کچرے کے تھیلے']],
+  carpenter: [['Hinge', 'Qabza', 'قبضہ'], ['Lock', 'Taala', 'تالا'], ['Wood', 'Lakri', 'لکڑی'], ['Handle', 'Handle', 'ہینڈل']],
+  'ac-technician': [['Gas', 'Gas', 'گیس'], ['Capacitor', 'Capacitor', 'کپیسیٹر'], ['Fan motor', 'Pankhe ki motor', 'پنکھے کی موٹر'], ['Copper pipe', 'Copper pipe', 'کاپر پائپ']],
+  painter: [['Paint', 'Rang', 'رنگ'], ['Putty', 'Putty', 'پٹی'], ['Primer', 'Primer', 'پرائمر'], ['Roller or brush', 'Roller ya brush', 'رولر یا برش']],
+  mechanic: [['Battery', 'Battery', 'بیٹری'], ['Engine oil', 'Engine oil', 'انجن آئل'], ['Spark plug', 'Plug', 'پلگ'], ['Brake pads', 'Brake pad', 'بریک پیڈ']],
+  fumigator: [['Spray', 'Spray', 'اسپرے'], ['Gel bait', 'Gel', 'جیل'], ['Chemical', 'Dawai', 'دوائی'], ['Sprayer', 'Spray machine', 'اسپرے مشین']],
+};
+
+// Karachi areas. Keys must match AREAS in api/src/lib/rules.js.
+const AREA = {
+  dha: ['DHA', 'DHA', 'ڈی ایچ اے'],
+  clifton: ['Clifton', 'Clifton', 'کلفٹن'],
+  saddar: ['Saddar', 'Saddar', 'صدر'],
+  pechs: ['PECHS', 'PECHS', 'پی ای سی ایچ ایس'],
+  bahadurabad: ['Bahadurabad', 'Bahadurabad', 'بہادر آباد'],
+  'gulshan-e-iqbal': ['Gulshan-e-Iqbal', 'Gulshan-e-Iqbal', 'گلشنِ اقبال'],
+  'gulistan-e-jauhar': ['Gulistan-e-Jauhar', 'Gulistan-e-Jauhar', 'گلستانِ جوہر'],
+  'north-nazimabad': ['North Nazimabad', 'North Nazimabad', 'نارتھ ناظم آباد'],
+  nazimabad: ['Nazimabad', 'Nazimabad', 'ناظم آباد'],
+  korangi: ['Korangi', 'Korangi', 'کورنگی'],
+  malir: ['Malir', 'Malir', 'ملیر'],
+};
+export const AREA_KEYS = Object.keys(AREA);
+
+const fill = (text, vars) => (vars ? text.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m)) : text);
+
+const LangContext = createContext(null);
+
+export function LangProvider({ children }) {
+  const [lang, setLang] = useState('en');
+
+  useEffect(() => { store.get('lang').then((l) => l === 'roman-ur' && setLang('roman-ur')); }, []);
+
+  const value = useMemo(() => {
+    const i = lang === 'en' ? 0 : 1;
+    const main = (row, vars) => (row ? fill(row[i], vars) : '');
+    const urdu = (row, vars) => (row?.[2] ? fill(row[2], vars) : '');
+    const choose = (next) => { setLang(next); store.set('lang', next); };
+    return {
+      lang,
+      setLang: choose,
+      toggle: () => choose(lang === 'en' ? 'roman-ur' : 'en'),
+      t: (key, vars) => (S[key] ? main(S[key], vars) : key), // main line (English or Roman Urdu)
+      u: (key, vars) => urdu(S[key], vars),                  // Urdu script line
+      has: (key) => Boolean(S[key]),
+      cat: (key) => main(CATEGORY[key]) || key,
+      catU: (key) => urdu(CATEGORY[key]),
+      areaName: (key) => main(AREA[key]) || key,
+      areaU: (key) => urdu(AREA[key]),
+      pick: (row) => main(row), // for rows like PROBLEMS[x][n]
+      pickU: (row) => urdu(row),
+    };
+  }, [lang]);
+
+  return <LangContext.Provider value={value}>{children}</LangContext.Provider>;
+}
+
+export const useLang = () => useContext(LangContext);

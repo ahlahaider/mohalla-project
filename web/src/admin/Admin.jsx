@@ -61,7 +61,9 @@ function Disputes() {
                 <div key={i} className="entry" style={{ display: 'block' }}>
                   <strong>{s.by}</strong> <span className="muted">{new Date(s.at).toLocaleString()}</span>
                   <p>{s.text}</p>
-                  {s.evidenceUrls?.map((u) => <a key={u} href={u} target="_blank" rel="noreferrer">evidence </a>)}
+                  {s.evidenceUrls?.length > 0 && (
+                    <div className="thumbs">{s.evidenceUrls.map((u) => <a key={u} href={u} target="_blank" rel="noreferrer" title="Open photo"><img src={u} alt="Evidence" /></a>)}</div>
+                  )}
                 </div>
               ))}
             </div>
@@ -69,7 +71,10 @@ function Disputes() {
               <h3>The record</h3>
               {d.record?.agreement.map((e) => (
                 <div key={e._id} className={`entry ${e.status}`}>
-                  <span>{L.entry(e.kind)} {e.scope && `· ${e.scope}`} {e.billPhotoUrl && <a href={e.billPhotoUrl} target="_blank" rel="noreferrer">bill</a>}</span>
+                  <span>
+                    {L.entry(e.kind)} {e.scope && `· ${e.scope}`}
+                    {e.billPhotoUrl && <a className="thumbs" href={e.billPhotoUrl} target="_blank" rel="noreferrer" title="Open the shop bill"><img src={e.billPhotoUrl} alt="Shop bill" /></a>}
+                  </span>
                   <span>{rupees(e.amount)} <StatusChip status={e.status} /></span>
                 </div>
               ))}

@@ -18,7 +18,22 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "name": "Mohalla Worker"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Mohalla uses the camera to take photos of shop bills and your profile picture.",
+          "photosPermission": "Mohalla lets you choose a photo of a bill or your profile picture."
+        }
+      ]
+    ],
+    "scheme": "mohalla-worker",
+    "backgroundColor": "#fbf4ea",
+    "primaryColor": "#b5432a"
   }
 }

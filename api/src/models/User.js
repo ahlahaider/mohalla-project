@@ -49,7 +49,13 @@ const userSchema = new Schema({
 
   vouchWarnings: { type: Number, default: 0 },
   vouchingRevoked: { type: Boolean, default: false },
-  assistedBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who helped set up this profile
+  // "Someone is helping me": who set up this account for the worker (a shop, friend or family).
+  assistedBy: {
+    name: { type: String, trim: true, maxlength: 80 },
+    phone: String,
+    relation: { type: String, enum: ['shop', 'friend', 'family', 'other'] },
+  },
+  photoUrl: String, // profile photo (/api/photos/...)
 
   workerProfile: workerProfileSchema,
 }, { timestamps: true });
@@ -61,6 +67,7 @@ userSchema.methods.toPublic = function toPublic() {
     role: this.role,
     name: this.name,
     area: this.area,
+    photoUrl: this.photoUrl,
     badges: this.badges,
     reliability: reliability(this.stats),
     stats: this.role === 'customer' ? { jobsCompleted: this.stats.jobsCompleted, paidOnRecord: this.stats.paidOnRecord } : undefined,

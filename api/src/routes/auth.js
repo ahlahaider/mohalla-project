@@ -1,11 +1,12 @@
 // Logging in and signing up.
 //
-// Customers (web app) never get a password. They use their mobile number and a 4-digit PIN:
-//   Sign-up:     POST /phone -> POST /otp/request -> POST /otp/verify -> POST /register (name + PIN)
+// Customers (web app) and workers (worker app) log in the same way: mobile number + 4-digit PIN.
+//   Sign-up:     POST /phone -> POST /otp/request -> POST /otp/verify -> POST /register (name + PIN, + work details for workers)
 //   Every time:  POST /phone -> POST /login (number + PIN)
 //   Forgot PIN:  POST /otp/request (purpose "reset") -> POST /otp/verify -> POST /pin/reset
 //
-// Workers (Expo app) and admin still use a password until the worker app moves to PINs.
+// Each app sends `app: 'customer' | 'worker'`, so a worker who opens the customer
+// website (or the other way round) is told which app to use. Admin keeps a password.
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -13,13 +14,22 @@ import User from '../models/User.js';
 import Otp from '../models/Otp.js';
 import { config } from '../config.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
-import { asyncRoute, httpError, normalisePhone } from '../lib/http.js';
-import { AREAS, isValidPin, recordWrongPin, lockMinutesLeft } from '../lib/rules.js';
+import { asyncRoute, httpError, normalisePhone, isPhotoUrl } from '../lib/http.js';
+import { AREAS, CATEGORIES, isValidPin, recordWrongPin, lockMinutesLeft } from '../lib/rules.js';
 import { OTP, CHANNELS, makeCode, sendCode } from '../lib/otp.js';
 
 const router = Router();
 
 const PURPOSES = ['signup', 'reset'];
+const APPS = ['customer', 'worker'];
+
+// The number belongs to the other app's kind of account.
+function wrongApp(user, app) {
+  if (!user || !APPS.includes(app) || user.role === app) return;
+  throw httpError(409, user.role === 'worker'
+    ? 'This number is a worker account. Use the Mohalla Worker app.'
+    : 'This number is a customer account. Use the Mohalla website.', { code: 'wrong_app', role: user.role });
+}
 
 function phoneOrFail(raw) {
   const phone = normalisePhone(raw);
@@ -44,23 +54,27 @@ function readTicket(ticket, purpose) {
   throw httpError(401, 'Your code expired. Ask for a new one.', { code: 'otp_expired' });
 }
 
-// POST /api/auth/phone { phone } -> { registered }
+// POST /api/auth/phone { phone, app? } -> { registered }
 // Decides the next screen: PIN (already has an account) or sign-up code.
 // Trade-off agreed with the team: this shows whether a number has an account,
 // as most Pakistani wallet apps do. The PIN lock keeps accounts safe.
 router.post('/phone', asyncRoute(async (req, res) => {
   const phone = phoneOrFail(req.body.phone);
-  res.json({ phone, registered: Boolean(await User.exists({ phone })) });
+  const user = await User.findOne({ phone }, 'role');
+  wrongApp(user, req.body.app);
+  res.json({ phone, registered: Boolean(user) });
 }));
 
-// POST /api/auth/otp/request { phone, channel: 'sms' | 'whatsapp', purpose: 'signup' | 'reset' }
+// POST /api/auth/otp/request { phone, channel: 'sms' | 'whatsapp', purpose: 'signup' | 'reset', app? }
 router.post('/otp/request', asyncRoute(async (req, res) => {
   const phone = phoneOrFail(req.body.phone);
   const { channel, purpose = 'signup' } = req.body;
   if (!CHANNELS.includes(channel)) throw httpError(400, 'Choose SMS or WhatsApp');
   if (!PURPOSES.includes(purpose)) throw httpError(400, 'Unknown purpose');
 
-  const registered = await User.exists({ phone });
+  const registered = await User.findOne({ phone }, 'role');
+  wrongApp(registered, req.body.app);
+  if (purpose === 'reset' && registered?.role === 'admin') throw httpError(404, 'No account with this number yet.', { code: 'not_registered' });
   if (purpose === 'signup' && registered) throw httpError(409, 'This number already has an account. Enter your PIN.', { code: 'already_registered' });
   if (purpose === 'reset' && !registered) throw httpError(404, 'No account with this number yet.', { code: 'not_registered' });
 
@@ -112,46 +126,75 @@ router.post('/otp/verify', asyncRoute(async (req, res) => {
   res.json({ ticket: makeTicket(phone, purpose) });
 }));
 
-// POST /api/auth/register
+// POST /api/auth/register  (after a sign-up code was verified)
 //   Customers: { role: 'customer', ticket, name, pin, area?, language? }
-//   Workers:   { role: 'worker', name, phone, password, area, workerProfile } (worker app, for now)
+//   Workers:   { role: 'worker', ticket, name, pin, language?, workerProfile: { skills, areasServed,
+//                priceMin?, priceMax?, gender? }, assistedBy?: { name, phone?, relation } }
 // Admin accounts are only made by the seed script, so nobody can register as an admin.
 router.post('/register', asyncRoute(async (req, res) => {
-  const { role, name, area, language, workerProfile } = req.body;
-  if (!['customer', 'worker'].includes(role)) throw httpError(400, 'Choose customer or worker');
+  const { role, name, language } = req.body;
+  if (!APPS.includes(role)) throw httpError(400, 'Choose customer or worker');
+  if (req.body.phone !== undefined) phoneOrFail(req.body.phone); // a typo'd number fails early
+  const phone = readTicket(req.body.ticket, 'signup');
   if (!name?.trim()) throw httpError(400, 'Enter your name', { code: 'no_name' });
-  if (area && !AREAS[area]) throw httpError(400, 'Unknown area');
-
-  let phone;
-  let secret;
-  if (role === 'customer') {
-    if (req.body.phone !== undefined) phoneOrFail(req.body.phone); // a typo'd number fails early
-    phone = readTicket(req.body.ticket, 'signup');
-    if (!isValidPin(req.body.pin)) throw httpError(400, 'Choose 4 numbers for your PIN', { code: 'bad_pin' });
-    secret = req.body.pin;
-  } else {
-    phone = phoneOrFail(req.body.phone);
-    if (!req.body.password || req.body.password.length < 6) throw httpError(400, 'Password needs at least 6 characters');
-    secret = req.body.password;
-  }
-
+  if (!isValidPin(req.body.pin)) throw httpError(400, 'Choose 4 numbers for your PIN', { code: 'bad_pin' });
   if (await User.exists({ phone })) throw httpError(409, 'That number already has an account', { code: 'already_registered' });
 
-  const user = await User.create({
+  const fields = {
     role,
     name: name.trim(),
     phone,
     // bcrypt stores a one-way hash, so even we can't read the PIN back.
-    passwordHash: await bcrypt.hash(secret, 10),
-    area,
-    language,
-    workerProfile: role === 'worker' ? { areasServed: area ? [area] : [], ...workerProfile } : undefined,
-  });
+    passwordHash: await bcrypt.hash(req.body.pin, 10),
+    language: ['en', 'roman-ur'].includes(language) ? language : undefined,
+  };
 
+  if (role === 'customer') {
+    if (req.body.area && !AREAS[req.body.area]) throw httpError(400, 'Unknown area');
+    fields.area = req.body.area;
+  } else {
+    Object.assign(fields, workerFields(req.body));
+  }
+
+  const user = await User.create(fields);
   res.status(201).json(loginReply(user));
 }));
 
-// POST /api/auth/login { phone, pin }   (workers/admin: { phone, password })
+// Checks the work details a new worker filled in.
+function workerFields({ workerProfile: p = {}, assistedBy, photoUrl }) {
+  const skills = [...new Set(p.skills || [])].filter((c) => CATEGORIES.includes(c));
+  const areasServed = [...new Set(p.areasServed || [])].filter((a) => AREAS[a]);
+  if (!skills.length) throw httpError(400, 'Choose the work you do', { code: 'no_skills' });
+  if (!areasServed.length) throw httpError(400, 'Choose the areas you work in', { code: 'no_areas' });
+  const priceMin = p.priceMin == null || p.priceMin === '' ? undefined : Number(p.priceMin);
+  if (priceMin !== undefined && (!Number.isFinite(priceMin) || priceMin < 0)) throw httpError(400, 'Enter your starting price in rupees', { code: 'bad_price' });
+
+  const fields = {
+    area: areasServed[0],
+    photoUrl: isPhotoUrl(photoUrl) ? photoUrl : undefined,
+    workerProfile: {
+      skills,
+      areasServed,
+      priceMin,
+      priceMax: p.priceMax == null ? undefined : Number(p.priceMax) || undefined,
+      gender: ['female', 'male'].includes(p.gender) ? p.gender : 'unspecified',
+      availableToday: true, // new workers start "working today" so customers can find them
+    },
+  };
+
+  if (assistedBy?.name?.trim()) {
+    const helperPhone = assistedBy.phone ? normalisePhone(assistedBy.phone) : undefined;
+    if (assistedBy.phone && !helperPhone) throw httpError(400, "The helper's number doesn't look right", { code: 'bad_helper_phone' });
+    fields.assistedBy = {
+      name: assistedBy.name.trim().slice(0, 80),
+      phone: helperPhone,
+      relation: ['shop', 'friend', 'family'].includes(assistedBy.relation) ? assistedBy.relation : 'other',
+    };
+  }
+  return fields;
+}
+
+// POST /api/auth/login { phone, pin, app? }   (admin: { phone, password })
 router.post('/login', asyncRoute(async (req, res) => {
   const phone = normalisePhone(req.body.phone);
   // +passwordHash: that field is hidden by default (select: false in the model).
@@ -159,6 +202,7 @@ router.post('/login', asyncRoute(async (req, res) => {
   const secret = String(req.body.pin ?? req.body.password ?? '');
 
   if (user) {
+    wrongApp(user, req.body.app);
     const minutes = lockMinutesLeft(user);
     if (minutes) throw httpError(423, `Too many wrong tries. Try again in ${minutes} minutes.`, { code: 'pin_locked', minutes });
   }
@@ -188,8 +232,9 @@ router.post('/login', asyncRoute(async (req, res) => {
 router.post('/pin/reset', asyncRoute(async (req, res) => {
   const phone = readTicket(req.body.ticket, 'reset');
   if (!isValidPin(req.body.pin)) throw httpError(400, 'Choose 4 numbers for your PIN', { code: 'bad_pin' });
-  const user = await User.findOne({ phone, role: 'customer' });
-  if (!user) throw httpError(404, 'No customer account with this number.', { code: 'not_registered' });
+  const user = await User.findOne({ phone, role: { $in: APPS } });
+  if (!user) throw httpError(404, 'No account with this number.', { code: 'not_registered' });
+  wrongApp(user, req.body.app);
 
   user.passwordHash = await bcrypt.hash(req.body.pin, 10);
   user.failedLogins = 0;
@@ -200,7 +245,7 @@ router.post('/pin/reset', asyncRoute(async (req, res) => {
 
 // GET /auth/me — who am I? The apps call this on start-up.
 router.get('/me', requireAuth(), (req, res) => {
-  res.json({ user: { ...req.user.toPublic(), phone: req.user.phone, language: req.user.language, strikes: req.user.strikes.length } });
+  res.json({ user: { ...req.user.toPublic(), phone: req.user.phone, language: req.user.language, strikes: req.user.strikes.length, assistedBy: req.user.assistedBy?.name ? { name: req.user.assistedBy.name, relation: req.user.assistedBy.relation } : undefined } });
 });
 
 export default router;

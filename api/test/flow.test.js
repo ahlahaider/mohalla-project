@@ -11,6 +11,7 @@ import User from '../src/models/User.js';
 import Job from '../src/models/Job.js';
 import { Review, Dispute, Vouch, Report } from '../src/models/others.js';
 import Otp from '../src/models/Otp.js';
+import Photo from '../src/models/Photo.js';
 
 const uri = process.env.TEST_MONGO_URI;
 const opts = { skip: !uri && 'set TEST_MONGO_URI to run' };
@@ -21,7 +22,7 @@ let base;
 before(async () => {
   if (!uri) return;
   await mongoose.connect(uri);
-  await Promise.all([User, Job, Review, Dispute, Vouch, Report, Otp].map((m) => m.deleteMany({})));
+  await Promise.all([User, Job, Review, Dispute, Vouch, Report, Otp, Photo].map((m) => m.deleteMany({})));
   // Admins can't register through the API, so make one directly.
   await User.create({ role: 'admin', name: 'Admin', phone: '03000000000', passwordHash: await bcrypt.hash('secret1', 4) });
   server = app.listen(0);
@@ -48,6 +49,13 @@ async function call(method, path, token, body, expect = [200, 201]) {
   return data;
 }
 
+// Sign up through the code screens (demo mode returns the code), as either app does.
+async function signUp(phone, body) {
+  const sent = await call('POST', '/auth/otp/request', null, { phone, channel: 'sms', app: body.role });
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone, code: sent.demoCode });
+  return call('POST', '/auth/register', null, { ...body, ticket, pin: body.pin || '1111' });
+}
+
 test('a direct job goes from request to rating, then a dispute is ruled', opts, async () => {
   // Customer signs up: number -> code (demo mode returns it) -> name + PIN.
   const check = await call('POST', '/auth/phone', null, { phone: '0300-1111111' });
@@ -56,10 +64,11 @@ test('a direct job goes from request to rating, then a dispute is ruled', opts, 
   assert.equal(sent.demoCode, '1234');
   const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03001111111', code: sent.demoCode });
   const c = await call('POST', '/auth/register', null, { role: 'customer', ticket, name: 'Sana', pin: '4321', area: 'pechs' });
-  const w = await call('POST', '/auth/register', null, {
-    role: 'worker', name: 'Rashid', phone: '03111111111', password: 'secret1', area: 'pechs',
-    workerProfile: { skills: ['electrician'], areasServed: ['pechs'], priceMin: 800, priceMax: 5000 },
+  const w = await signUp('03111111111', {
+    role: 'worker', name: 'Rashid', pin: '2580',
+    workerProfile: { skills: ['electrician'], areasServed: ['pechs'], priceMin: 800, priceMax: 5000, gender: 'male' },
   });
+  assert.equal(w.user.area, 'pechs');
   const admin = await call('POST', '/auth/login', null, { phone: '03000000000', password: 'secret1' });
 
   // Customer finds the worker by searching a neighbouring area.
@@ -89,7 +98,13 @@ test('a direct job goes from request to rating, then a dispute is ruled', opts, 
 
   // Parts need a bill photo.
   await call('POST', `/jobs/${job.id}/agreement`, w.token, { kind: 'part', amount: 900 }, 400);
-  const part = await call('POST', `/jobs/${job.id}/agreement`, w.token, { kind: 'part', amount: 900, billPhotoUrl: 'https://x/bill.jpg' });
+  const tinyJpeg = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64');
+  const bill = await call('POST', '/photos', w.token, { data: tinyJpeg });
+  assert.match(bill.url, /^\/api\/photos\/[a-f0-9]{32}$/);
+  const img = await fetch(base.replace('/api', '') + bill.url);
+  assert.equal(img.headers.get('content-type'), 'image/jpeg');
+  await call('POST', `/jobs/${job.id}/agreement`, w.token, { kind: 'part', amount: 900, billPhotoUrl: 'not-a-photo' }, 400);
+  const part = await call('POST', `/jobs/${job.id}/agreement`, w.token, { kind: 'part', amount: 900, billPhotoUrl: bill.url });
   const afterPart = await call('POST', `/jobs/${job.id}/agreement/${part.agreement[2]._id}/accept`, c.token);
   assert.equal(afterPart.total, 3900);
 
@@ -111,6 +126,15 @@ test('a direct job goes from request to rating, then a dispute is ruled', opts, 
   // Dispute, response, ruling with a strike.
   const d = await call('POST', `/jobs/${job.id}/disputes`, c.token, { type: 'scope', text: 'Fan still wobbles' });
   await call('POST', `/disputes/${d.dispute.id}/statements`, w.token, { text: 'Wobble is the ceiling hook, not in scope' });
+  const seen = await call('GET', `/jobs/${job.id}`, w.token);
+  assert.equal(seen.job.dispute.openedByMe, false);
+  assert.deepEqual(seen.job.dispute.statements.map((x) => x.mine), [false, true]);
+
+  // The worker's earnings screen counts the cash they confirmed.
+  const sum = await call('GET', '/workers/me/summary?period=month', w.token);
+  assert.equal(sum.cash, 3900);
+  assert.equal(sum.jobs, 1);
+  assert.equal(sum.vouch.ok, false);
   const queue = await call('GET', '/disputes', admin.token);
   assert.equal(queue.disputes[0].record.total, 3900);
   const ruling = await call('POST', `/disputes/${d.dispute.id}/ruling`, admin.token, { outcome: 'upheld', againstId: c.user.id, note: 'Scope in agreement excludes hook' });
@@ -119,11 +143,13 @@ test('a direct job goes from request to rating, then a dispute is ruled', opts, 
 
 test('requests can be declined, and only the assigned worker can answer', opts, async () => {
   const c = await call('POST', '/auth/login', null, { phone: '03001111111', pin: '4321' });
-  const other = await call('POST', '/auth/register', null, {
-    role: 'worker', name: 'Other', phone: '03119999999', password: 'secret1', area: 'pechs',
+  const other = await signUp('03119999999', {
+    role: 'worker', name: 'Other',
     workerProfile: { skills: ['electrician'], areasServed: ['pechs'] },
+    assistedBy: { name: 'Bismillah Hardware', phone: '0321 5555555', relation: 'shop' },
   });
-  const w = await call('POST', '/auth/login', null, { phone: '03111111111', password: 'secret1' });
+  assert.equal((await User.findById(other.user.id)).assistedBy.relation, 'shop');
+  const w = await call('POST', '/auth/login', null, { phone: '03111111111', pin: '2580', app: 'worker' });
   const { job } = await call('POST', '/jobs', c.token, {
     workerId: w.user.id, category: 'electrician', description: 'Socket sparks', area: 'pechs', address: 'House 1',
   });
@@ -159,4 +185,31 @@ test('5 wrong PINs lock the number; a reset code sets a new PIN', opts, async ()
   const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03004444444', purpose: 'reset', code: '1234' });
   await call('POST', '/auth/pin/reset', null, { ticket, pin: '1357' });
   await call('POST', '/auth/login', null, { phone: '03004444444', pin: '1357' });
+});
+
+test('each number only works in its own app', opts, async () => {
+  const asWorker = await call('POST', '/auth/phone', null, { phone: '03001111111', app: 'worker' }, 409);
+  assert.equal(asWorker.code, 'wrong_app');
+  assert.equal(asWorker.role, 'customer');
+  const asCustomer = await call('POST', '/auth/login', null, { phone: '03111111111', pin: '2580', app: 'customer' }, 409);
+  assert.equal(asCustomer.code, 'wrong_app');
+  await call('POST', '/auth/otp/request', null, { phone: '03111111111', channel: 'sms', purpose: 'reset', app: 'customer' }, 409);
+  // A worker needs at least one service and one area.
+  const sent = await call('POST', '/auth/otp/request', null, { phone: '03118888888', channel: 'sms', app: 'worker' });
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03118888888', code: sent.demoCode });
+  const bad = await call('POST', '/auth/register', null, { role: 'worker', ticket, name: 'N', pin: '1111', workerProfile: { areasServed: ['pechs'] } }, 400);
+  assert.equal(bad.code, 'no_skills');
+});
+
+test('experienced workers vouch for others by phone number', opts, async () => {
+  const w = await call('POST', '/auth/login', null, { phone: '03111111111', pin: '2580' });
+  const notYet = await call('POST', '/vouches', w.token, { phone: '03119999999' }, 403);
+  assert.equal(notYet.code, 'vouch_not_allowed');
+  await User.updateOne({ phone: '03111111111' }, { 'stats.jobsCompleted': 12, 'stats.jobsAccepted': 12 });
+  await call('POST', '/vouches', w.token, { phone: '03009999999' }, 404);
+  const ok = await call('POST', '/vouches', w.token, { phone: '0311 9999999' }, 201);
+  assert.equal(ok.worker.name, 'Other');
+  const sum = await call('GET', '/workers/me/summary', w.token);
+  assert.equal(sum.vouch.left, 2);
+  assert.deepEqual(sum.vouch.people.map((p) => p.name), ['Other']);
 });

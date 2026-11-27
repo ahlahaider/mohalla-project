@@ -7,10 +7,10 @@ import { config } from './config.js';
 import User from './models/User.js';
 import Job from './models/Job.js';
 import { Review, Dispute, Vouch, Report } from './models/others.js';
-import { daysAgo } from './lib/rules.js';
+import { daysAgo, hoursFromNow } from './lib/rules.js';
 
-const PASSWORD = 'password123'; // workers and admin
-const PIN = '1234';             // customers log in with number + PIN
+const PASSWORD = 'password123'; // admin only
+const PIN = '1234';             // customers and workers log in with number + PIN
 
 await mongoose.connect(config.mongoUri);
 await Promise.all([User, Job, Review, Dispute, Vouch, Report].map((m) => m.deleteMany({})));
@@ -22,6 +22,7 @@ const user = (fields) => User.create({ passwordHash, ...fields });
 const admin = await user({ role: 'admin', name: 'Mohalla Admin', phone: '03000000000', area: 'pechs' });
 const sana = await user({ passwordHash: pinHash, role: 'customer', name: 'Sana Qureshi', phone: '03001111111', area: 'gulshan-e-iqbal' });
 const bilal = await user({ passwordHash: pinHash, role: 'customer', name: 'Bilal Ahmed', phone: '03002222222', area: 'dha', language: 'roman-ur' });
+const khadija = await user({ passwordHash: pinHash, role: 'customer', name: 'Khadija Khan', phone: '03003333333', area: 'pechs' });
 
 // [name, phone, skills, areas, priceMin, priceMax, gender, founding, verified, completed, accepted, onTimeYes]
 const workerRows = [
@@ -38,7 +39,7 @@ const workerRows = [
 const workers = [];
 for (const [name, phone, skills, areasServed, priceMin, priceMax, gender, founding, verified, completed, accepted, onTimeYes] of workerRows) {
   workers.push(await user({
-    role: 'worker', name, phone, area: areasServed[0],
+    passwordHash: pinHash, role: 'worker', name, phone, area: areasServed[0],
     badges: { founding, verified },
     stats: { jobsCompleted: completed, jobsAccepted: accepted, onTimeAsked: completed, onTimeYes },
     workerProfile: { skills, areasServed, priceMin, priceMax, gender, availableToday: completed % 2 === 0, bio: `${skills.join(' and ')} in ${areasServed.join(', ')}` },
@@ -74,9 +75,38 @@ await finishedJob(bilal, workers[3], 'cleaner', 'Deep clean before Eid guests',
 
 await Promise.all([sana, bilal].map((c) => User.updateOne({ _id: c._id }, { $inc: { 'stats.jobsCompleted': 2, 'stats.paidOnRecord': 2 } })));
 
-console.log(`Seeded. Customers log in with PIN ${PIN}; workers and admin with password "${PASSWORD}".`);
+// Jobs still in progress for Rashid, so the worker app's home screen has something on it.
+const today = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1); return d; };
+await Job.create({
+  customer: sana._id, worker: rashid._id, mode: 'direct', category: 'electrician',
+  description: 'Fan not working. The ceiling fan in the bedroom makes noise and stops.',
+  area: 'gulshan-e-iqbal', address: 'House 12, Block 5, near the green mosque', preferredTime: today(10),
+  status: 'requested', expiresAt: hoursFromNow(3),
+});
+await Job.create({
+  customer: bilal._id, worker: rashid._id, mode: 'direct', category: 'electrician',
+  description: 'Wiring. Lights flicker in the lounge.', area: 'dha', address: 'Flat 4, Khayaban-e-Ittehad',
+  preferredTime: daysAgo(0), status: 'accepted', acceptedAt: daysAgo(0),
+  agreement: [
+    { kind: 'visit', amount: 500, status: 'accepted', decidedAt: daysAgo(0) },
+    { kind: 'quote', amount: 2500, scope: 'Change 3 switches and loose wiring in the lounge', status: 'proposed' },
+  ],
+});
+await Job.create({
+  customer: khadija._id, worker: rashid._id, mode: 'direct', category: 'electrician',
+  description: 'Switch board. Sparks from the kitchen switch board.', area: 'pechs', address: 'House 88, Block 2',
+  preferredTime: daysAgo(1), status: 'completed', acceptedAt: daysAgo(1), completedAt: daysAgo(0), onTime: true,
+  agreement: [
+    { kind: 'quote', amount: 3000, scope: 'New kitchen switch board', status: 'accepted', decidedAt: daysAgo(1) },
+    { kind: 'part', amount: 900, scope: 'Switch board', status: 'accepted', decidedAt: daysAgo(1) },
+  ],
+  payment: { customerAmount: 3900 },
+});
+await User.updateOne({ _id: rashid._id }, { $inc: { 'stats.jobsAccepted': 3 } });
+
+console.log(`Seeded. Customers and workers log in with PIN ${PIN}; admin with password "${PASSWORD}".`);
 console.log('Admin:     03000000000');
-console.log(`Customers: 03001111111 (Sana), 03002222222 (Bilal)  PIN ${PIN}`);
-console.log('Workers:   03111111111 (Rashid, electrician), 03112222222 (Imran, plumber), 03113333333 (Shabana, cleaner) ...');
+console.log('Customers: 03001111111 (Sana), 03002222222 (Bilal), 03003333333 (Khadija)');
+console.log('Workers:   03111111111 (Rashid, electrician: has a new request), 03112222222 (Imran, plumber), 03113333333 (Shabana, cleaner) ...');
 console.log(`Admin id: ${admin._id}`);
 await mongoose.disconnect();

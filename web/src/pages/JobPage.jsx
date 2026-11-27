@@ -133,7 +133,7 @@ export default function JobPage() {
         {contactOpen && (
           <section className="yes-card pop-in">
             <div className="who">
-              <Avatar name={worker.name} />
+              <Avatar name={worker.name} photoUrl={worker.photoUrl} />
               <div>
                 <h2><Say k="saidYes" vars={{ name }} /></h2>
                 <div style={{ opacity: 0.85, fontWeight: 600 }}>{t('canSeeAddress', { name })}</div>
@@ -199,12 +199,7 @@ export default function JobPage() {
 
         {nextStep({ job, name, service, hasWaiting })}
 
-        {job.dispute && (
-          <div className="box saffron note">
-            <Ico icon={Warning} tone="saffron" size={22} />
-            <span>{t(job.dispute.status === 'open' ? 'reportOpen' : 'reportClosed')}</span>
-          </div>
-        )}
+        {job.dispute && <DisputeCard job={job} name={name} onSent={load} />}
 
         <hr className="soft" />
         <div className="stack">
@@ -412,5 +407,67 @@ function Line({ icon, text, waiting = false }) {
       <Ico icon={icon} tone="saffron" size={24} className={waiting ? 'waiting' : ''} />
       <span>{text}</span>
     </div>
+  );
+}
+
+// A reported problem: what each side said, Mohalla's decision, and a box to add your side.
+function DisputeCard({ job, name, onSent }) {
+  const L = useLang();
+  const { t } = L;
+  const d = job.dispute;
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const theyOpened = !d.openedByMe;
+  const iSaid = d.statements.some((s) => s.mine);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/disputes/${d.id}/statements`, { method: 'POST', body: { text: text.trim() } });
+      setText('');
+      await onSent();
+    } catch (err) { setError(err); } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="card stack" style={{ boxShadow: d.status === 'open' ? '0 0 0 2px var(--chilli), 0 4px 0 2px var(--chilli)' : undefined }}>
+      <div className="row" style={{ gap: 12 }}>
+        <Ico icon={Warning} tone="chilli" size={24} box={42} />
+        <Say k={`${d.openedByMe ? 'd' : 'dt'}_${d.type}`} vars={{ name }} />
+      </div>
+      {d.status === 'open'
+        ? <p style={{ fontWeight: 700, color: 'var(--chilli-deep)' }}>{theyOpened ? t('disputeTheirs', { name, time: new Date(d.respondBy).toLocaleString('en-PK', { weekday: 'long', hour: 'numeric', minute: '2-digit' }) }) : t('reportOpen')}</p>
+        : (
+          <div className="box">
+            <b>{t('reportClosed')}</b>
+            <p>{d.ruling?.againstMe ? t('rulingAgainst') : d.status === 'upheld' ? t('rulingFor') : t('rulingNone')}</p>
+            {d.ruling?.note && <p className="muted">“{d.ruling.note}”</p>}
+          </div>
+        )}
+      {d.statements.map((s, i) => (
+        <div key={i} className={`said ${s.mine ? 'mine' : ''}`}>
+          <div className="who">{s.mine ? t('yourSide') : t('theirSide', { name })}</div>
+          <p>{s.text}</p>
+          {s.evidenceUrls?.length > 0 && (
+            <div className="photo-row photo-row--view">{s.evidenceUrls.map((p) => <a key={p} href={p} target="_blank" rel="noreferrer"><img src={p} alt="" /></a>)}</div>
+          )}
+        </div>
+      ))}
+      {d.status === 'open' && (
+        <>
+          <label className="field">
+            <span className="field-label"><Say k={theyOpened && !iSaid ? 'tellYourSide' : 'addMore'} /></span>
+            <textarea className="input" rows={3} value={text} onChange={(e) => setText(e.target.value.slice(0, 2000))} />
+          </label>
+          <ErrorBox>{error && errorText(error, L)}</ErrorBox>
+          <button type="button" className="btn btn--henna btn--small moves" disabled={!text.trim() || busy} onClick={send}>
+            <Ico icon={PaperPlaneTilt} tone="cream" size={22} box={34} motion="drive" />
+            <Say k="sendSide" />
+          </button>
+        </>
+      )}
+    </section>
   );
 }

@@ -6,7 +6,7 @@ A marketplace for hiring local workers in Karachi (plumbers, electricians, clean
 mohalla/
 ├── api/          Node + Express + MongoDB. One API for both apps; all trust rules live here.
 ├── web/          React + Vite. Customers (search, request, agreement, rating) and admin screens.
-└── worker-app/   Expo (React Native). Workers: accept jobs, propose prices, confirm payment.
+└── worker-app/   Expo (React Native) + Expo Router. Workers: requests, prices, parts with bill photos, cash, ratings, earnings, vouching.
 ```
 
 ## How the pieces fit
@@ -38,6 +38,33 @@ Login only appears when someone taps "Ask [name] to come" or opens My jobs, and 
 - Icons are [Phosphor](https://phosphoricons.com) "duotone", recoloured per service in `app.css`; their movements are the `mo-*` animations there.
 - Admin screens keep their original desktop look at `/admin` (password login at `/admin/login`).
 
+## The worker app (`worker-app/`)
+
+Same look, words and moving icons as the customer website, rebuilt for phones with Expo. Every file in `worker-app/src/app/` is a screen (Expo Router).
+
+| Screen | File |
+| --- | --- |
+| Welcome: I'm new / I have an account / Someone is helping me | `welcome.js` |
+| Log in (number → PIN, forgot PIN) | `login.js` |
+| Sign up in 4 steps: number + code → work → areas + price → name, man/woman, photo, PIN | `signup.js` |
+| Home: "I'm working today" switch, new requests with a countdown ring, my jobs | `home.js` |
+| New request: customer's rating and paid-in-full record, problem, photos, when; yes / no | `request/[id].js` |
+| Job page: address + call/WhatsApp/map, the 4 steps (visit charge, full price, parts and extra work, cash) | `job/[id]/index.js` |
+| Send a price (visit charge, full price or extra work) | `job/[id]/price.js` |
+| Add a part with a photo of the bill | `job/[id]/part.js` |
+| Got the cash? Rate the customer | `job/[id]/paid.js` |
+| Report a problem (with photos) | `job/[id]/problem.js` |
+| My earnings (week / month), vouching | `earnings.js`, `vouch.js` |
+| Help, My profile (photo, work, areas, price, log out) | `help.js`, `profile.js` |
+
+- `src/ui/theme.js`: the colours (same as `web/src/ui/app.css`). `src/ui/kit.js`: buttons, chips, cards, keypad, sheets.
+- `src/ui/motion.js`: the icon movements. Icons dance once when a screen opens and again each time their button is pressed (or hovered in the web preview).
+- `src/lib/i18n.js`: every word as [English, Roman Urdu, Urdu]. **Have native speakers check the Urdu.**
+- Home checks for new requests every 15 seconds while the app is open and buzzes when one arrives. (Phone notifications while the app is closed need a development build; see "Next" below.)
+
+## Photos
+Bill photos, the customer's problem photos, dispute evidence and worker profile photos are stored in MongoDB (`api/src/models/Photo.js`), so no extra account is needed. Both apps shrink each photo to 1200px before uploading (about 100–300 KB). `POST /api/photos` returns an address like `/api/photos/<long random key>` that is saved on the job.
+
 ## Setting it up (first time)
 
 You need **Node.js 20 or newer** and a free **MongoDB Atlas** account.
@@ -59,14 +86,16 @@ npm run seed                # fills the database with demo users and jobs (wipes
 npm run dev                 # starts the API on http://localhost:4000, restarts when you save
 ```
 `npm run seed` prints the demo logins:
-- Customers (web app, number + PIN `1234`): `03001111111` (Sana), `03002222222` (Bilal)
-- Admin (web app at `/admin/login`, password `password123`): `03000000000`
-- Workers (worker app, password `password123`): `03111111111` (Rashid, electrician), `03112222222` (Imran, plumber), `03113333333` (Shabana, cleaner)
+- Customers (website, number + PIN `1234`): `03001111111` (Sana), `03002222222` (Bilal), `03003333333` (Khadija)
+- Workers (worker app, number + PIN `1234`): `03111111111` (Rashid, electrician: has a new request waiting), `03112222222` (Imran, plumber), `03113333333` (Shabana, cleaner)
+- Admin (website at `/admin/login`, password `password123`): `03000000000`
 
 Check it works: open http://localhost:4000/api/health. It should say `{"ok":true}`.
 
-### Customer login: number + PIN, with sign-up codes
-Customers never get a password. The first time, they enter their number, choose **WhatsApp or SMS** for a 4-number code, then their name and a 4-number PIN. After that it is just number + PIN. 5 wrong PINs lock the number for 10 minutes (`PIN_LOCK` in `api/src/lib/rules.js`).
+### Login: number + PIN, with sign-up codes (customers and workers)
+Nobody gets a password (except admin). The first time, people enter their number, choose **WhatsApp or SMS** for a 4-number code, then their details and a 4-number PIN. After that it is just number + PIN. 5 wrong PINs lock the number for 10 minutes (`PIN_LOCK` in `api/src/lib/rules.js`).
+
+Each app tells the API which app it is, so a worker's number typed on the customer website (or a customer's number in the worker app) gets a clear "use the other app" message.
 
 How codes are sent is decided by **one setting per channel** in `api/.env`:
 
@@ -112,6 +141,7 @@ cd worker-app
 npm install
 EXPO_PUBLIC_API_URL=http://YOUR-LAPTOP-IP:4000/api npx expo start
 ```
+Expo Go must support the project's Expo SDK (58). If Expo Go says the project is incompatible, update Expo Go from the store.
 On Windows PowerShell, set the variable first: `$env:EXPO_PUBLIC_API_URL="http://YOUR-LAPTOP-IP:4000/api"; npx expo start`.
 
 4. Scan the QR code with your phone's camera (iPhone) or with Expo Go (Android).
@@ -133,13 +163,14 @@ npm test
 
 | Area | Routes |
 | --- | --- |
-| Auth | `POST /api/auth/phone` (has an account?), `POST /api/auth/otp/request`, `POST /api/auth/otp/verify`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/pin/reset`, `GET /api/auth/me` |
-| Workers | `GET /api/workers` (filters: category, area, maxPrice, available, female), `GET /api/workers/:id`, `PATCH /api/workers/me`, `PATCH /api/workers/me/availability` |
+| Auth | `POST /api/auth/phone` (has an account?), `POST /api/auth/otp/request`, `POST /api/auth/otp/verify`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/pin/reset`, `GET /api/auth/me` (each takes `app: 'customer' \| 'worker'`) |
+| Workers | `GET /api/workers` (filters: category, area, maxPrice, available, female), `GET /api/workers/:id`, `PATCH /api/workers/me`, `PATCH /api/workers/me/availability`, `GET /api/workers/me/summary?period=week\|month` (earnings + vouching) |
+| Photos | `POST /api/photos` (`{ data: "data:image/jpeg;base64,…" }`), `GET /api/photos/:key` |
 | Jobs | `POST /api/jobs`, `GET /api/jobs/mine`, `GET /api/jobs/open`, `GET /api/jobs/:id`, `POST /api/jobs/:id/accept` · `decline` · `cancel` · `complete` · `payment` · `review` · `disputes` |
 | Quotes | `POST /api/jobs/:id/quotes`, `POST /api/jobs/:id/quotes/:quoteId/pick` |
 | Agreement | `POST /api/jobs/:id/agreement`, `POST /api/jobs/:id/agreement/:entryId/accept` (or `reject`) |
 | Disputes | `POST /api/disputes/:id/statements`, `GET /api/disputes/mine`, `GET /api/disputes` (admin), `POST /api/disputes/:id/ruling` (admin) |
-| Vouches | `POST /api/vouches/:workerId`, `DELETE /api/vouches/:workerId` |
+| Vouches | `POST /api/vouches` (`{ phone }`), `POST /api/vouches/:workerId`, `DELETE /api/vouches/:workerId` |
 | Admin | `GET /api/admin/users`, `PATCH /api/admin/users/:id`, `GET /api/admin/reports`, `PATCH /api/admin/reports/:id`, `POST /api/reports` |
 
 Every request (except the auth routes, search and worker pages) needs the header `Authorization: Bearer <token>`, which login returns.
@@ -148,11 +179,12 @@ Every request (except the auth routes, search and worker pages) needs the header
 
 Done (must-haves from the spec): login for three roles, worker profiles, search with area neighbours and filters, direct requests that expire after 4 hours, accept/decline, contact details hidden until acceptance, the two-stage agreement with amendments and parts, completion with "on time?", two-sided payment confirmation, hidden-until-both ratings, reliability counts, disputes with admin rulings and strikes, safety reports, admin badges/suspensions, English / Roman Urdu. Posted jobs with quotes and vouching rules are also in the API.
 
-Next, in rough order:
-1. **Photo uploads** for bills and dispute evidence: `expo-image-picker` in the worker app plus Cloudinary in the API. Bills are a text link for now.
-2. **Vouching screens**: the API is ready; the worker app needs a "Vouch for a worker" button.
-3. **Assisted signup**: let a worker or founding business create a profile for someone else (the `assistedBy` field is already on users).
-4. **Deploy**: API to Render, web to Vercel (set `VITE_API_URL` to the Render URL + `/api`), worker app via Expo Go.
-5. Voice notes on job requests, if there's time after the presentation.
+Also done: photo uploads (bills, problem photos, evidence, profile photos), vouching screens, assisted sign-up ("Someone is helping me"), replying to a reported problem on both sides, worker earnings.
 
-The Roman Urdu text is a first draft (`web/src/i18n.jsx`, `worker-app/src/strings.js`). Have the team and the workers you interview fix anything that sounds off.
+Next, in rough order:
+1. **Phone notifications** for new requests while the worker app is closed (`expo-notifications`; needs a development build, not Expo Go).
+2. **Deploy**: API to Render, web to Vercel (set `VITE_API_URL` to the Render URL + `/api`), worker app via Expo Go.
+3. A "read aloud" button for slow readers (skipped for the course project).
+4. Voice notes on job requests, if there's time after the presentation.
+
+The Roman Urdu text is a first draft (`web/src/i18n.jsx`, `worker-app/src/lib/i18n.js`). Have the team and the workers you interview fix anything that sounds off.

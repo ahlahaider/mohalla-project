@@ -68,12 +68,14 @@ test('strikes older than 6 months stop counting', () => {
   assert.equal(strikesInWindow(strikes), 1);
 });
 
-test('disputes: 48 hours after completion; no-shows before completion', () => {
+test('disputes: 48 hours after completion; no-shows and safety problems before completion', () => {
   const now = new Date();
   assert.ok(disputeWindowOpen({ completedAt: new Date(now - 47 * 3600e3) }, 'scope', now));
   assert.ok(!disputeWindowOpen({ completedAt: new Date(now - 49 * 3600e3) }, 'scope', now));
   assert.ok(disputeWindowOpen({ status: 'accepted' }, 'no-show', now));
+  assert.ok(disputeWindowOpen({ status: 'agreed' }, 'misconduct', now));
   assert.ok(!disputeWindowOpen({ status: 'accepted' }, 'scope', now));
+  assert.ok(!disputeWindowOpen({ status: 'requested' }, 'misconduct', now));
 });
 
 test('requests expire after their deadline', () => {

@@ -11,7 +11,7 @@ import { api, errorText } from '../api.js';
 import { useLang, PROBLEMS } from '../i18n.jsx';
 import { useArea, firstName } from '../prefs.js';
 import { CATEGORY } from '../ui/icons.js';
-import { TopBar, Ico, Say, Pair, Avatar, Loading, ErrorBox, AreaSheet } from '../ui/kit.jsx';
+import { TopBar, Ico, Say, Pair, Avatar, Loading, ErrorBox, AreaSheet, PhotoPicker } from '../ui/kit.jsx';
 
 // Each time slot starts and ends at these hours (24-hour clock).
 const SLOTS = [
@@ -42,6 +42,7 @@ export default function RequestForm() {
   const [category, setCategory] = useState(null);
   const [problem, setProblem] = useState(null); // index into PROBLEMS[category], or 'other'
   const [details, setDetails] = useState('');
+  const [photos, setPhotos] = useState([]); // optional photos of the problem ("/api/photos/…")
   const [day, setDay] = useState(() => (SLOTS.every((s) => slotPassed(0, s)) ? 1 : null));
   const [slot, setSlot] = useState(null);
   const [address, setAddress] = useState('');
@@ -80,7 +81,7 @@ export default function RequestForm() {
     try {
       const { job } = await api('/jobs', {
         method: 'POST',
-        body: { mode: 'direct', workerId: id, category, description, area, address: address.trim(), preferredTime: when.toISOString() },
+        body: { mode: 'direct', workerId: id, category, description, area, address: address.trim(), preferredTime: when.toISOString(), photos },
       });
       navigate(`/jobs/${job.id}`, { replace: true });
     } catch (err) {
@@ -96,7 +97,7 @@ export default function RequestForm() {
 
   return (
     <>
-      <TopBar title={t('askToCome', { name })} sub={t('quickQs')} right={<Avatar name={worker.name} size={48} />} />
+      <TopBar title={t('askToCome', { name })} sub={t('quickQs')} right={<Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />} />
 
       <main className="page">
         {/* 1 · problem */}
@@ -134,6 +135,10 @@ export default function RequestForm() {
             <textarea className="input" rows={2} value={details} onChange={(e) => setDetails(e.target.value.slice(0, 600))}
               placeholder={problem === 'other' ? '' : 'e.g. the ceiling fan in the bedroom'} />
           </label>
+          <div className="field">
+            <span className="field-label" style={{ fontSize: 16 }}><span>{t('photoProblem')} <span className="muted">({t('canSkip')})</span></span></span>
+            <PhotoPicker photos={photos} onChange={setPhotos} label="addPhoto" />
+          </div>
         </section>
 
         {/* 2 · when */}

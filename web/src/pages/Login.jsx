@@ -35,7 +35,7 @@ export default function Login() {
 
   const [step, setStep] = useState('start'); // start | phone | pin | channel | code | name | newpin | confirmpin
   const [intent, setIntent] = useState(null); // the door they picked: 'login' | 'signup'
-  const [mismatch, setMismatch] = useState(null); // 'hasAccount' | 'noAccount' (picked the wrong door)
+  const [mismatch, setMismatch] = useState(null); // 'hasAccount' | 'noAccount' (picked the wrong door) | 'wrongApp' (a worker's number)
   const [mode, setMode] = useState('signup'); // signup | reset (which code we ask for)
   const [rest, setRest] = useState('');       // the number after the leading 0, e.g. "3001234567"
   const [pin, setPin] = useState('');
@@ -70,7 +70,13 @@ export default function Login() {
 
   // ---- step actions ----
   const submitPhone = () => run(async () => {
-    const { registered } = await api('/auth/phone', { method: 'POST', body: { phone } });
+    let registered;
+    try {
+      ({ registered } = await api('/auth/phone', { method: 'POST', body: { phone, app: 'customer' } }));
+    } catch (err) {
+      if (err.code === 'wrong_app') { setMismatch('wrongApp'); return; } // a worker's number: point them to their app
+      throw err;
+    }
     if (intent === 'login' && registered) setStep('pin');
     else if (intent === 'signup' && !registered) { setMode('signup'); setStep('channel'); }
     else setMismatch(registered ? 'hasAccount' : 'noAccount'); // wrong door: say so, offer the right one
@@ -92,7 +98,7 @@ export default function Login() {
   const requestCode = (ch) => run(async () => {
     setChannel(ch);
     try {
-      const res = await api('/auth/otp/request', { method: 'POST', body: { phone, channel: ch, purpose: mode } });
+      const res = await api('/auth/otp/request', { method: 'POST', body: { phone, channel: ch, purpose: mode, app: 'customer' } });
       setDemoCode(res.demoCode || null);
       setResendAt(Date.now() + res.resendSeconds * 1000);
       setCode('');
@@ -253,15 +259,14 @@ export default function Login() {
             {mismatch && (
               <div className="card stack pop-in" role="alert">
                 <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
-                  <Ico icon={Info} tone="saffron" size={24} />
+                  <Ico icon={Info} tone={mismatch === 'wrongApp' ? 'chilli' : 'saffron'} size={24} />
                   <div>
-                    <Say k={mismatch} className="door-title" />
-                    <div className="muted" style={{ fontWeight: 600 }}>{t(mismatch === 'hasAccount' ? 'hasAccountHint' : 'noAccountHint')}</div>
+                    <Say k={mismatch === 'wrongApp' ? 'wrongAppTitle' : mismatch} className="door-title" />
+                    <div className="muted" style={{ fontWeight: 600 }}>{t({ hasAccount: 'hasAccountHint', noAccount: 'noAccountHint', wrongApp: 'wrongAppHint' }[mismatch])}</div>
                   </div>
                 </div>
-                {mismatch === 'hasAccount'
-                  ? <button type="button" className="btn" onClick={goLoginInstead}><Key size={24} weight="duotone" /><Say k="loginInstead" /></button>
-                  : <button type="button" className="btn btn--saffron" onClick={goSignupInstead}><UserPlus size={24} weight="duotone" /><Say k="signupWithThis" /></button>}
+                {mismatch === 'hasAccount' && <button type="button" className="btn" onClick={goLoginInstead}><Key size={24} weight="duotone" /><Say k="loginInstead" /></button>}
+                {mismatch === 'noAccount' && <button type="button" className="btn btn--saffron" onClick={goSignupInstead}><UserPlus size={24} weight="duotone" /><Say k="signupWithThis" /></button>}
                 <button type="button" className="link-btn" style={{ alignSelf: 'center' }}
                   onClick={() => { setMismatch(null); setRest(''); }}>{t('orTryAnother')}</button>
               </div>

@@ -8,7 +8,7 @@ import Job from '../models/Job.js';
 import User from '../models/User.js';
 import { Dispute, Vouch } from '../models/others.js';
 import { requireAuth } from '../middleware/auth.js';
-import { asyncRoute, httpError } from '../lib/http.js';
+import { asyncRoute, httpError, photoList } from '../lib/http.js';
 import { applyStrike, agreementTotal, daysAgo, UNRESOLVED_FLAG, VOUCH } from '../lib/rules.js';
 
 const router = Router();
@@ -23,7 +23,7 @@ router.post('/:id/statements', requireAuth('customer', 'worker'), asyncRoute(asy
   if (dispute.status !== 'open') throw httpError(409, 'This dispute is closed');
   if (!req.body.text?.trim()) throw httpError(400, 'Say what happened');
 
-  dispute.statements.push({ by: req.user._id, text: req.body.text, evidenceUrls: req.body.evidenceUrls || [] });
+  dispute.statements.push({ by: req.user._id, text: req.body.text.trim(), evidenceUrls: photoList(req.body.evidenceUrls, 3) });
   await dispute.save();
   res.status(201).json({ statements: dispute.statements.length });
 }));

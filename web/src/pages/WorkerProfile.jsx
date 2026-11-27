@@ -45,7 +45,7 @@ export default function WorkerProfile() {
 
       <main className="page">
         <div className="profile-head">
-          <Avatar name={worker.name} />
+          <Avatar name={worker.name} photoUrl={worker.photoUrl} />
           <h1>{worker.name}</h1>
           <div className="muted" style={{ fontWeight: 700 }}>
             {p.skills?.map(cat).join(', ')} · {p.areasServed?.map(areaName).join(', ')}

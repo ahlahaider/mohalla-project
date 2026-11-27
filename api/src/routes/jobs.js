@@ -8,7 +8,7 @@ import Job from '../models/Job.js';
 import User from '../models/User.js';
 import { Review, Dispute } from '../models/others.js';
 import { requireAuth } from '../middleware/auth.js';
-import { asyncRoute, httpError } from '../lib/http.js';
+import { asyncRoute, httpError, isPhotoUrl, photoList } from '../lib/http.js';
 import { visibleRatings } from '../lib/ratings.js';
 import {
   AREAS, agreementTotal, canPropose, isExpired, requestExpiry, disputeWindowOpen,
@@ -51,9 +51,10 @@ async function jobView(job, user) {
   const iAmCustomer = isCustomer(job, user);
   const showContact = iAmCustomer || user.role === 'admin' || CONTACT_VISIBLE.includes(job.status);
   const person = (p) => p && {
-    id: p._id, name: p.name, badges: p.badges, area: p.area,
+    id: p._id, name: p.name, badges: p.badges, area: p.area, photoUrl: p.photoUrl,
     phone: showContact ? p.phone : undefined,
   };
+  const me = user._id.toString();
 
   const ids = [idOf(job.customer), idOf(job.worker)].filter(Boolean);
   const [ratings, dispute, myReview] = await Promise.all([
@@ -72,6 +73,7 @@ async function jobView(job, user) {
     area: job.area,
     address: showContact ? job.address : undefined,
     preferredTime: job.preferredTime,
+    photos: job.photos || [],
     expiresAt: job.expiresAt,
     createdAt: job.createdAt,
     acceptedAt: job.acceptedAt,
@@ -85,7 +87,15 @@ async function jobView(job, user) {
     onTime: job.onTime,
     completedAt: job.completedAt,
     reviewedByMe: Boolean(myReview),
-    dispute: dispute && { id: dispute._id, type: dispute.type, status: dispute.status },
+    // A reported problem: both sides can read every statement and add theirs.
+    dispute: dispute && {
+      id: dispute._id, type: dispute.type, status: dispute.status, respondBy: dispute.respondBy,
+      openedByMe: dispute.openedBy.toString() === me,
+      statements: dispute.statements.map((st) => ({
+        mine: st.by?.toString() === me, text: st.text, evidenceUrls: st.evidenceUrls, at: st.at,
+      })),
+      ruling: dispute.ruling?.at ? { againstMe: dispute.ruling.against?.toString() === me, note: dispute.ruling.note, at: dispute.ruling.at } : undefined,
+    },
   };
 }
 
@@ -94,12 +104,13 @@ async function jobView(job, user) {
 // POST /api/jobs — customer sends a direct request, or posts a job for quotes.
 router.post('/', requireAuth('customer'), asyncRoute(async (req, res) => {
   const { mode = 'direct', workerId, category, description, area, address, preferredTime } = req.body;
+  const photos = photoList(req.body.photos, 3);
   if (!['direct', 'quotes'].includes(mode)) throw httpError(400, 'Unknown mode');
   if (!description?.trim() || !address?.trim()) throw httpError(400, 'Describe the problem and give an address');
   if (!AREAS[area]) throw httpError(400, 'Choose an area');
 
   const job = new Job({
-    customer: req.user._id, mode, category, description, area, address, preferredTime,
+    customer: req.user._id, mode, category, description, area, address, preferredTime, photos,
     status: mode === 'direct' ? 'requested' : 'open',
   });
 
@@ -119,16 +130,21 @@ router.post('/', requireAuth('customer'), asyncRoute(async (req, res) => {
 router.get('/mine', requireAuth('customer', 'worker'), asyncRoute(async (req, res) => {
   await expireStale();
   const filter = req.user.role === 'worker' ? { worker: req.user._id } : { customer: req.user._id };
-  const jobs = await Job.find(filter).sort({ updatedAt: -1 }).populate('customer', 'name').populate('worker', 'name');
+  const jobs = await Job.find(filter).sort({ updatedAt: -1 }).populate('customer', 'name photoUrl').populate('worker', 'name photoUrl');
+  const iAmWorker = req.user.role === 'worker';
 
   res.json({
     jobs: jobs.map((j) => ({
       id: j._id, status: j.status, mode: j.mode, category: j.category, description: j.description,
-      area: j.area, preferredTime: j.preferredTime, updatedAt: j.updatedAt,
+      area: j.area, preferredTime: j.preferredTime, updatedAt: j.updatedAt, expiresAt: j.expiresAt, completedAt: j.completedAt,
       customer: j.customer?.name, worker: j.worker?.name, total: agreementTotal(j.agreement),
-      // Something is waiting on me: a new request (worker) or a proposal to decide (customer).
-      needsMe: req.user.role === 'worker'
-        ? j.status === 'requested'
+      otherPhotoUrl: (iAmWorker ? j.customer : j.worker)?.photoUrl,
+      waitingForCustomer: j.agreement.some((e) => e.status === 'proposed'),
+      // The worker has said how much cash they got (the last step for them).
+      cashConfirmed: j.payment?.workerAmount != null,
+      // Something is waiting on me: a new request or cash to confirm (worker), or a proposal to decide (customer).
+      needsMe: iAmWorker
+        ? j.status === 'requested' || (j.status === 'completed' && j.payment?.workerAmount == null)
         : j.agreement.some((e) => e.status === 'proposed') || (j.status === 'open' && j.quotes.length > 0),
     })),
   });
@@ -150,8 +166,8 @@ router.get('/open', requireAuth('worker'), asyncRoute(async (req, res) => {
 // GET /api/jobs/:id — full job, with contact details only when allowed.
 router.get('/:id', requireAuth(), asyncRoute(async (req, res) => {
   const job = await Job.findById(req.params.id)
-    .populate('customer', 'name phone area badges stats')
-    .populate('worker', 'name phone area badges stats')
+    .populate('customer', 'name phone area badges stats photoUrl')
+    .populate('worker', 'name phone area badges stats photoUrl')
     .populate('quotes.worker', 'name badges stats');
   if (!job) throw httpError(404, 'Job not found');
 
@@ -249,9 +265,10 @@ router.post('/:id/agreement', requireAuth('worker'), asyncRoute(async (req, res)
       ? 'Changes and parts can be added once the full quote is accepted'
       : 'The full quote is already agreed; propose an amendment instead');
   }
-  if (kind === 'part' && !billPhotoUrl) throw httpError(400, 'Add a photo of the bill for parts');
+  if (kind === 'part' && !isPhotoUrl(billPhotoUrl)) throw httpError(400, 'Add a photo of the bill for parts', { code: 'no_bill_photo' });
+  if (billPhotoUrl && !isPhotoUrl(billPhotoUrl)) throw httpError(400, 'Unknown photo');
 
-  job.agreement.push({ kind, amount, scope, billPhotoUrl });
+  job.agreement.push({ kind, amount, scope: scope?.trim().slice(0, 500) || undefined, billPhotoUrl });
   await job.save();
   res.status(201).json({ agreement: job.agreement, total: agreementTotal(job.agreement) });
 }));
@@ -354,7 +371,8 @@ router.post('/:id/review', requireAuth('customer', 'worker'), asyncRoute(async (
 router.post('/:id/disputes', requireAuth('customer', 'worker'), asyncRoute(async (req, res) => {
   const job = await loadJob(req.params.id);
   requireParty(job, req.user);
-  const { type, text, evidenceUrls = [] } = req.body;
+  const { type, text } = req.body;
+  const evidenceUrls = photoList(req.body.evidenceUrls, 3);
   if (!['no-show', 'non-payment', 'scope', 'misconduct'].includes(type)) throw httpError(400, 'Choose a dispute type');
   if (!text?.trim()) throw httpError(400, 'Say what happened');
   if (!disputeWindowOpen(job, type)) throw httpError(409, 'Disputes must be opened within 48 hours of the job');

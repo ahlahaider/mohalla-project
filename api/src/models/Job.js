@@ -33,6 +33,7 @@ const jobSchema = new Schema({
   area: { type: String, required: true },
   address: { type: String, required: true }, // only shown to the worker after accepting
   preferredTime: Date,
+  photos: [String], // up to 3 photos of the problem, from the customer
   voiceNoteUrl: String, // should-have; unused until uploads are added
 
   // open      = posted job collecting quotes

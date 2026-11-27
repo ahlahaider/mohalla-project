@@ -16,6 +16,7 @@ import { useLang } from '../i18n.jsx';
 import { firstName } from '../prefs.js';
 import { CATEGORY } from '../ui/icons.js';
 import { TopBar, Ico, Say, Avatar, Loading, ErrorBox, Sheet } from '../ui/kit.jsx';
+import Offers from './Offers.jsx';
 
 const ACTIVE = ['requested', 'accepted', 'agreed'];
 const POLL_MS = 15000;
@@ -102,6 +103,11 @@ export default function JobPage() {
 
   if (!job) return <><TopBar title="" back="/jobs" />{error ? <main className="page"><ErrorBox>{errorText(error, L)}</ErrorBox></main> : <Loading />}</>;
 
+  // A posted job nobody has been picked for yet: show the workers' prices instead.
+  if (job.mode === 'quotes' && !job.worker) {
+    return <Offers job={job} reload={load} whenLine={whenText(job.preferredTime, t)} status={jobStatus(job)} />;
+  }
+
   const worker = job.worker;
   const name = worker ? firstName(worker.name) : '';
   const st = jobStatus(job);
@@ -135,7 +141,7 @@ export default function JobPage() {
             <div className="who">
               <Avatar name={worker.name} photoUrl={worker.photoUrl} />
               <div>
-                <h2><Say k="saidYes" vars={{ name }} /></h2>
+                <h2><Say k={job.mode === 'quotes' ? 'youPicked' : 'saidYes'} vars={{ name }} /></h2>
                 <div style={{ opacity: 0.85, fontWeight: 600 }}>{t('canSeeAddress', { name })}</div>
               </div>
             </div>
@@ -175,7 +181,7 @@ export default function JobPage() {
           <TimelineRow icon={PaperPlaneTilt} tone="leaf" text={t('tlSent')} time={job.createdAt} />
 
           {(job.acceptedAt || ['accepted', 'agreed', 'completed'].includes(job.status)) && (
-            <TimelineRow icon={HandWaving} tone="leaf" text={t('tlYes', { name })} time={job.acceptedAt} />
+            <TimelineRow icon={HandWaving} tone="leaf" text={t(job.mode === 'quotes' ? 'tlPicked' : 'tlYes', { name })} time={job.acceptedAt} />
           )}
           {job.status === 'declined' && <TimelineRow icon={XCircle} tone="chilli" text={t('s_declined', { name })} />}
           {job.status === 'expired' && <TimelineRow icon={Hourglass} tone="chilli" text={t('s_expired')} />}

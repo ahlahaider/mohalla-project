@@ -1,4 +1,6 @@
 // Screen 5 · Ask a worker to come: 3 questions, all answered by tapping.
+// With `posted`, the same form posts the job for every worker nearby to send a price
+// (/find/:category/post) instead of asking one worker.
 //   1. What is the problem?  (chips for this service, plus optional words)
 //   2. When?                  (today / tomorrow / day after + morning / afternoon / evening)
 //   3. Where?                 (area + house address, hidden until the worker says yes)
@@ -9,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { api, errorText } from '../api.js';
 import { useLang, PROBLEMS } from '../i18n.jsx';
+import { useAuth } from '../auth.jsx';
 import { useArea, firstName } from '../prefs.js';
 import { CATEGORY } from '../ui/icons.js';
 import { TopBar, Ico, Say, Pair, Avatar, Loading, ErrorBox, AreaSheet, PhotoPicker } from '../ui/kit.jsx';
@@ -29,8 +32,9 @@ const dayDate = (offset) => {
 };
 const slotPassed = (dayIndex, slot) => dayIndex === 0 && new Date().getHours() >= slot.to;
 
-export default function RequestForm() {
-  const { id } = useParams();
+export default function RequestForm({ posted = false }) {
+  const { id, category: postCategory } = useParams();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const L = useLang();
@@ -39,24 +43,26 @@ export default function RequestForm() {
 
   const [worker, setWorker] = useState(null);
   const [loadError, setLoadError] = useState(null);
-  const [category, setCategory] = useState(null);
+  const [category, setCategory] = useState(posted ? postCategory : null);
   const [problem, setProblem] = useState(null); // index into PROBLEMS[category], or 'other'
   const [details, setDetails] = useState('');
   const [photos, setPhotos] = useState([]); // optional photos of the problem ("/api/photos/…")
   const [day, setDay] = useState(() => (SLOTS.every((s) => slotPassed(0, s)) ? 1 : null));
   const [slot, setSlot] = useState(null);
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(user?.address || ''); // the saved address from Me → My details
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState(null);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    if (posted) return;
     api(`/workers/${id}`).then(({ worker: w }) => {
       setWorker(w);
       const skills = w.workerProfile?.skills || [];
       setCategory(skills.includes(params.get('cat')) ? params.get('cat') : skills[0]);
     }).catch(setLoadError);
-  }, [id, params]);
+  }, [id, params, posted]);
+  useEffect(() => { if (!area && user?.area) setArea(user.area); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const name = worker ? firstName(worker.name) : '';
   const problems = PROBLEMS[category] || [];
@@ -81,7 +87,9 @@ export default function RequestForm() {
     try {
       const { job } = await api('/jobs', {
         method: 'POST',
-        body: { mode: 'direct', workerId: id, category, description, area, address: address.trim(), preferredTime: when.toISOString(), photos },
+        body: posted
+          ? { mode: 'quotes', category, description, area, address: address.trim(), preferredTime: when.toISOString(), photos }
+          : { mode: 'direct', workerId: id, category, description, area, address: address.trim(), preferredTime: when.toISOString(), photos },
       });
       navigate(`/jobs/${job.id}`, { replace: true });
     } catch (err) {
@@ -91,13 +99,16 @@ export default function RequestForm() {
   }
 
   if (loadError) return <><TopBar title="" /><main className="page"><ErrorBox>{errorText(loadError, L)}</ErrorBox></main></>;
-  if (!worker) return <><TopBar title="" /><Loading /></>;
+  if (!worker && !posted) return <><TopBar title="" /><Loading /></>;
+  if (posted && !CATEGORY[category]) return <><TopBar title="" /><main className="page"><ErrorBox>{t('somethingWentWrong')}</ErrorBox></main></>;
 
-  const skills = worker.workerProfile?.skills || [];
+  const skills = posted ? [] : worker.workerProfile?.skills || [];
 
   return (
     <>
-      <TopBar title={t('askToCome', { name })} sub={t('quickQs')} right={<Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />} />
+      {posted
+        ? <TopBar title={t('postTitle')} sub={`${cat(category)} · ${t('postSub')}`} right={<Ico icon={CATEGORY[category].icon} tone={category} size={26} box={46} />} />
+        : <TopBar title={t('askToCome', { name })} sub={t('quickQs')} right={<Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />} />}
 
       <main className="page">
         {/* 1 · problem */}
@@ -143,7 +154,7 @@ export default function RequestForm() {
 
         {/* 2 · when */}
         <section className="card qcard">
-          <h2 className="q"><Num n={2} done={done2} /><Say k="q2" vars={{ name }} /></h2>
+          <h2 className="q"><Num n={2} done={done2} />{posted ? <Say k="q2any" /> : <Say k="q2" vars={{ name }} />}</h2>
           <div className="choice-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             {DAYS.map((k, i) => {
               const d = dayDate(i);
@@ -190,7 +201,7 @@ export default function RequestForm() {
             placeholder="House number, street, nearby landmark" />
           <div className="box leaf note">
             <Ico icon={Lock} tone="leaf" size={22} />
-            <span>{t('addressHidden', { name })}</span>
+            <span>{posted ? t('addressHiddenAny') : t('addressHidden', { name })}</span>
           </div>
         </section>
 
@@ -200,9 +211,9 @@ export default function RequestForm() {
       <div className="sticky-bar">
         <button type="button" className="btn moves" disabled={!ready || sending} onClick={send}>
           <Ico icon={PaperPlaneTilt} tone="cream" size={26} box={38} motion="drive" />
-          <Say k="sendTo" vars={{ name }} />
+          {posted ? <Say k="postSend" /> : <Say k="sendTo" vars={{ name }} />}
         </button>
-        <p className="muted center" style={{ marginTop: 8 }}>{ready ? t('sendNote', { name }) : t('answerAll')}</p>
+        <p className="muted center" style={{ marginTop: 8 }}>{!ready ? t('answerAll') : posted ? t('postNote') : t('sendNote', { name })}</p>
       </div>
 
       <AreaSheet open={picking} current={area} onClose={() => setPicking(false)} onPick={(a) => { setArea(a); setPicking(false); }} />

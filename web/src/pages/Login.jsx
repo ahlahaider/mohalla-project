@@ -335,7 +335,7 @@ export default function Login() {
   );
 }
 
-function Head({ icon, title, sub }) {
+export function Head({ icon, title, sub }) {
   return (
     <div className="stack">
       <Ico icon={icon} tone="henna" size={34} box={64} className="pop-in" />
@@ -347,7 +347,7 @@ function Head({ icon, title, sub }) {
 
 // "Where should we send your code?" asked in English AND Roman Urdu (and Urdu),
 // whichever language is chosen, because this is where people get stuck.
-function ChannelStep({ mode, busy, chosen, onPick, error }) {
+export function ChannelStep({ mode, busy, chosen, onPick, error }) {
   const { all, t } = useLang();
   const [en, roman, ur] = all('channelQ');
   return (

@@ -17,6 +17,7 @@ import JobPage from './pages/JobPage.jsx';
 import Finish from './pages/Finish.jsx';
 import Problem from './pages/Problem.jsx';
 import Help from './pages/Help.jsx';
+import Me, { MeDetails, MePin, MePhone, MeClose } from './pages/Me.jsx';
 import { AdminPage, AdminLogin } from './admin/AdminShell.jsx';
 
 function NeedLogin({ children }) {
@@ -54,6 +55,12 @@ export default function App() {
             <Route path="/help" element={<Help />} />
             <Route path="/login" element={<Login />} />
             <Route path="/workers/:id/request" element={customer(<RequestForm />)} />
+            <Route path="/find/:category/post" element={customer(<RequestForm posted />)} />
+            <Route path="/me" element={customer(<Me />)} />
+            <Route path="/me/details" element={customer(<MeDetails />)} />
+            <Route path="/me/pin" element={customer(<MePin />)} />
+            <Route path="/me/phone" element={customer(<MePhone />)} />
+            <Route path="/me/close" element={customer(<MeClose />)} />
             <Route path="/jobs" element={customer(<MyJobs />)} />
             <Route path="/jobs/:id" element={customer(<JobPage />)} />
             <Route path="/jobs/:id/finish" element={customer(<Finish />)} />

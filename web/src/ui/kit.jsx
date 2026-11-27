@@ -36,7 +36,9 @@ export function Ico({ icon: Icon, tone = 'ink', size = 26, box, motion, weight =
   const s = box ?? Math.round(size * 1.65);
   return (
     <span className={`ico tone-${tone} ${motion ? `mo-${motion}` : ''} ${className}`} style={{ '--s': `${s}px` }} aria-hidden="true">
-      <Icon weight={weight} size={size} />
+      {/* .ico-in plays the dance when the page opens; the svg inside plays it on hover/press.
+          Two layers so one never blocks the other from replaying. */}
+      <span className="ico-in"><Icon weight={weight} size={size} /></span>
     </span>
   );
 }

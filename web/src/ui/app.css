@@ -144,20 +144,25 @@ h2.q .ur { font-size: 16px; }
 @keyframes glow { 0%,100% { box-shadow: 0 0 0 0 rgba(242,165,49,.0); } 50% { box-shadow: 0 0 0 6px rgba(242,165,49,.28); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.ico svg { transform-origin: 50% 60%; }
-.mo-wiggle svg { --mo: wiggle .7s ease-in-out; }
-.mo-flash svg { --mo: flash .7s ease-in-out; }
-.mo-sweep svg { --mo: sweep .8s ease-in-out; }
-.mo-knock svg { --mo: knock .55s cubic-bezier(.3,1.6,.6,1); transform-origin: 20% 80%; }
-.mo-roll svg { --mo: roll .7s ease-in-out; }
-.mo-drive svg { --mo: drive .7s ease-in-out; }
-.mo-crawl svg { --mo: crawl .9s ease-in-out; }
-.mo-spin svg { --mo: spin-slow .9s ease-in-out; transform-origin: 50% 50%; }
-.mo-ring svg { --mo: ring 1s ease-in-out; }
+.ico-in { display: grid; place-items: center; }
+.ico-in, .ico svg { transform-origin: 50% 60%; }
+.mo-wiggle { --mo: wiggle .7s ease-in-out; }
+.mo-flash { --mo: flash .7s ease-in-out; }
+.mo-sweep { --mo: sweep .8s ease-in-out; }
+.mo-knock { --mo: knock .55s cubic-bezier(.3,1.6,.6,1); }
+.mo-knock :is(.ico-in, svg) { transform-origin: 20% 80%; }
+.mo-roll { --mo: roll .7s ease-in-out; }
+.mo-drive { --mo: drive .7s ease-in-out; }
+.mo-crawl { --mo: crawl .9s ease-in-out; }
+.mo-spin { --mo: spin-slow .9s ease-in-out; }
+.mo-spin :is(.ico-in, svg) { transform-origin: 50% 50%; }
+.mo-ring { --mo: ring 1s ease-in-out; }
 
-/* play the icon's move when its tile is pressed or hovered, and once when the page opens */
-.moves:hover .ico svg, .moves:active .ico svg, .moves:focus-visible .ico svg, .play-once .ico svg { animation: var(--mo, none); }
-.play-once .ico svg { animation-delay: calc(var(--i, 0) * 120ms + 250ms); }
+/* once when the page opens (on the wrapper, one after another) */
+.play-once .ico-in { animation: var(--mo, none); animation-delay: calc(var(--i, 0) * 120ms + 250ms); }
+/* again every time the icon, or the button/tile it sits in, is hovered, pressed or focused */
+.ico:not(.loop, .waiting):hover svg,
+:is(.moves, a, button, label):is(:hover, :active, :focus-visible) .ico:not(.loop, .waiting) svg { animation: var(--mo, none); }
 .loop .ico svg, .ico.loop svg { animation: var(--mo, none); animation-iteration-count: infinite; animation-duration: 2.6s; }
 .ico.waiting svg { animation: hourglass 2.4s ease-in-out infinite; transform-origin: 50% 50%; }
 .pop-in { animation: pop .45s cubic-bezier(.3,1.5,.6,1) both; }

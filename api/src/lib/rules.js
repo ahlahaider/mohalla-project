@@ -7,6 +7,7 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
 export const REQUEST_EXPIRY_HOURS = 4;   // unanswered direct requests expire
+export const POST_OPEN_HOURS = 24;       // a posted job collects prices from workers for this long
 export const DISPUTE_WINDOW_HOURS = 48;  // time to open a dispute after completion
 export const RESPONSE_WINDOW_HOURS = 48; // time for the other side to respond
 export const RATING_REVEAL_DAYS = 7;     // ratings hidden until both rate, or this passes
@@ -68,8 +69,14 @@ export function requestExpiry(now = new Date()) {
   return new Date(now.getTime() + REQUEST_EXPIRY_HOURS * HOUR);
 }
 
+// A posted job ("let workers send prices") stays open this long for prices.
+export function postExpiry(now = new Date()) {
+  return new Date(now.getTime() + POST_OPEN_HOURS * HOUR);
+}
+
+// Unanswered direct requests and posted jobs nobody was picked for both run out.
 export function isExpired(job, now = new Date()) {
-  return job.status === 'requested' && job.expiresAt && job.expiresAt < now;
+  return ['requested', 'open'].includes(job.status) && job.expiresAt && job.expiresAt < now;
 }
 
 // Total agreed price = every accepted entry (visit + quote + amendments + parts).

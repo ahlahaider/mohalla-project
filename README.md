@@ -28,7 +28,9 @@ Built phone-first for customers who may read slowly: big buttons and chips, an i
 | 5 Request: problem, day + time, address | `/workers/:id/request` | Yes |
 | 6 Job page: the price agreement timeline | `/jobs/:id` | Yes |
 | 7 Finish: on time? cash? stars | `/jobs/:id/finish` | Yes |
+| Post a job: workers nearby send prices, you pick one | `/find/:category/post` (then `/jobs/:id`) | Yes |
 | My jobs, Something wrong?, Help | `/jobs`, `/jobs/:id/problem`, `/help` | Yes (Help: no) |
+| Me: my details (name, home area, saved address), change PIN, change number, language, log out, close account | `/me`, `/me/details`, `/me/pin`, `/me/phone`, `/me/close` | Yes |
 
 Login only appears when someone taps "Ask [name] to come" or opens My jobs, and then sends them back where they were.
 
@@ -54,13 +56,20 @@ Same look, words and moving icons as the customer website, rebuilt for phones wi
 | Add a part with a photo of the bill | `job/[id]/part.js` |
 | Got the cash? Rate the customer | `job/[id]/paid.js` |
 | Report a problem (with photos) | `job/[id]/problem.js` |
+| Jobs near you: posted jobs to send a price for, and the prices I sent | `near.js`, `post/[id].js` |
 | My earnings (week / month), vouching | `earnings.js`, `vouch.js` |
-| Help, My profile (photo, work, areas, price, log out) | `help.js`, `profile.js` |
+| Me: "get more requests" checklist, my profile, my work, how customers see me, change PIN, change number, language, help, log out, close account | `me.js`, `settings/*.js`, `help.js` |
 
 - `src/ui/theme.js`: the colours (same as `web/src/ui/app.css`). `src/ui/kit.js`: buttons, chips, cards, keypad, sheets.
 - `src/ui/motion.js`: the icon movements. Icons dance once when a screen opens and again each time their button is pressed (or hovered in the web preview).
 - `src/lib/i18n.js`: every word as [English, Roman Urdu, Urdu]. **Have native speakers check the Urdu.**
 - Home checks for new requests every 15 seconds while the app is open and buzzes when one arrives. (Phone notifications while the app is closed need a development build; see "Next" below.)
+
+## Posted jobs ("let workers send prices")
+Besides asking one worker, a customer can post a job from the results page. Workers whose services and areas match see it under **Near you** and send one full price each (with a short note). The customer sees every price with the worker's rating and jobs done, but no phone numbers, and picks one: that price goes on the record as the agreed full price, and the job continues like any other (extras still need the customer's OK). A post stays open for 24 hours (`POST_OPEN_HOURS` in `rules.js`).
+
+## Closing an account
+"Close my account" (customers and workers) needs the PIN and is refused while a job is going on or a problem report is open. Waiting requests are cancelled; old jobs and ratings stay on the record because disputes are judged by it. A closed number can't log in (admin can reopen it).
 
 ## Photos
 Bill photos, the customer's problem photos, dispute evidence and worker profile photos are stored in MongoDB (`api/src/models/Photo.js`), so no extra account is needed. Both apps shrink each photo to 1200px before uploading (about 100–300 KB). `POST /api/photos` returns an address like `/api/photos/<long random key>` that is saved on the job.
@@ -165,6 +174,8 @@ npm test
 | --- | --- |
 | Auth | `POST /api/auth/phone` (has an account?), `POST /api/auth/otp/request`, `POST /api/auth/otp/verify`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/pin/reset`, `GET /api/auth/me` (each takes `app: 'customer' \| 'worker'`) |
 | Workers | `GET /api/workers` (filters: category, area, maxPrice, available, female), `GET /api/workers/:id`, `PATCH /api/workers/me`, `PATCH /api/workers/me/availability`, `GET /api/workers/me/summary?period=week\|month` (earnings + vouching) |
+| Settings | `PATCH /api/users/me` (customer name, area, address), `POST /api/auth/pin/change`, `POST /api/auth/phone/change` (after a code with purpose `change`), `POST /api/auth/close` |
+| Posted jobs | `POST /api/jobs` with `mode: 'quotes'`, `GET /api/jobs/open` (worker: jobs near you), `GET /api/jobs/bids` (worker: my prices), `POST /api/jobs/:id/quotes`, `POST /api/jobs/:id/quotes/:quoteId/pick` |
 | Photos | `POST /api/photos` (`{ data: "data:image/jpeg;base64,…" }`), `GET /api/photos/:key` |
 | Jobs | `POST /api/jobs`, `GET /api/jobs/mine`, `GET /api/jobs/open`, `GET /api/jobs/:id`, `POST /api/jobs/:id/accept` · `decline` · `cancel` · `complete` · `payment` · `review` · `disputes` |
 | Quotes | `POST /api/jobs/:id/quotes`, `POST /api/jobs/:id/quotes/:quoteId/pick` |

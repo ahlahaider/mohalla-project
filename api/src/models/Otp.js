@@ -7,7 +7,7 @@ const { Schema } = mongoose;
 
 const otpSchema = new Schema({
   phone: { type: String, required: true },
-  purpose: { type: String, enum: ['signup', 'reset'], required: true },
+  purpose: { type: String, enum: ['signup', 'reset', 'change'], required: true },
   channel: { type: String, enum: ['sms', 'whatsapp'], required: true },
   codeHash: { type: String, required: true },
   tries: { type: Number, default: 0 },

@@ -26,9 +26,11 @@ const userSchema = new Schema({
   failedLogins: { type: Number, default: 0 }, // wrong PINs in a row (see PIN_LOCK in rules.js)
   lockedUntil: Date,
   area: String,
+  address: { type: String, maxlength: 300 }, // customers: saved house address, fills the request form (never public)
   language: { type: String, enum: ['en', 'roman-ur'], default: 'en' },
 
-  status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
+  status: { type: String, enum: ['active', 'suspended', 'banned', 'closed'], default: 'active' },
+  closedAt: Date, // the person closed their own account (old jobs stay on the record)
   suspendedUntil: Date, // empty while suspended = waiting for admin review
   flaggedForReview: { type: Boolean, default: false }, // 3 unresolved disputes in 30 days
   strikes: [{ reason: String, dispute: { type: Schema.Types.ObjectId, ref: 'Dispute' }, at: Date }],

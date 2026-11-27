@@ -7,12 +7,13 @@ import { Router } from 'express';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
 import { Review, Dispute } from '../models/others.js';
+import { CATEGORIES } from '../lib/rules.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncRoute, httpError, isPhotoUrl, photoList } from '../lib/http.js';
 import { visibleRatings } from '../lib/ratings.js';
 import {
-  AREAS, agreementTotal, canPropose, isExpired, requestExpiry, disputeWindowOpen,
-  hoursFromNow, daysFromNow, RATING_REVEAL_DAYS, RESPONSE_WINDOW_HOURS,
+  AREAS, agreementTotal, canPropose, isExpired, requestExpiry, postExpiry, disputeWindowOpen,
+  hoursFromNow, daysFromNow, reliability, RATING_REVEAL_DAYS, RESPONSE_WINDOW_HOURS,
 } from '../lib/rules.js';
 
 const router = Router();
@@ -38,10 +39,10 @@ function requireStatus(job, ...statuses) {
   if (!statuses.includes(job.status)) throw httpError(409, `Not possible while the job is ${job.status}`);
 }
 
-// Requests nobody answered in time are marked expired whenever jobs are listed.
-// (Simpler than a background timer, and good enough for this project.)
+// Requests nobody answered in time (and posted jobs nobody was picked for) are
+// marked expired whenever jobs are listed. Simpler than a background timer.
 const expireStale = () =>
-  Job.updateMany({ status: 'requested', expiresAt: { $lt: new Date() } }, { status: 'expired' });
+  Job.updateMany({ status: { $in: ['requested', 'open'] }, expiresAt: { $lt: new Date() } }, { status: 'expired' });
 
 // Contact details only appear once the worker has accepted: this protects the
 // customer's address and stops people collecting numbers without a real job.
@@ -56,7 +57,8 @@ async function jobView(job, user) {
   };
   const me = user._id.toString();
 
-  const ids = [idOf(job.customer), idOf(job.worker)].filter(Boolean);
+  const quoteWorkers = iAmCustomer ? job.quotes.map((q) => idOf(q.worker)) : [];
+  const ids = [idOf(job.customer), idOf(job.worker), ...quoteWorkers].filter(Boolean);
   const [ratings, dispute, myReview] = await Promise.all([
     visibleRatings(ids),
     Dispute.findOne({ job: job._id }).sort({ createdAt: -1 }),
@@ -80,7 +82,20 @@ async function jobView(job, user) {
     customer: { ...person(job.customer), rating: ratings.get(idOf(job.customer).toString()) || null,
       paidOnRecord: job.customer.stats?.paidOnRecord, jobsCompleted: job.customer.stats?.jobsCompleted },
     worker: job.worker ? { ...person(job.worker), rating: ratings.get(idOf(job.worker).toString()) || null } : null,
-    quotes: iAmCustomer ? job.quotes.map((q) => ({ id: q._id, amount: q.amount, note: q.note, worker: person(q.worker) })) : undefined,
+    // Posted jobs: the customer sees every worker's price; a worker only sees their own.
+    quotes: iAmCustomer ? job.quotes.map((q) => ({
+      id: q._id, amount: q.amount, note: q.note, at: q.createdAt,
+      // No phone number here: contact details only open once the customer picks someone.
+      worker: q.worker && {
+        ...person(q.worker),
+        phone: undefined,
+        rating: ratings.get(idOf(q.worker).toString()) || null,
+        reliability: reliability(q.worker.stats),
+        gender: q.worker.workerProfile?.gender,
+      },
+    })) : undefined,
+    myQuote: !iAmCustomer ? (() => { const q = job.quotes.find((x) => idOf(x.worker)?.equals(user._id)); return q ? { amount: q.amount, note: q.note } : null; })() : undefined,
+    quotesCount: job.quotes.length,
     agreement: job.agreement,
     total: agreementTotal(job.agreement),
     payment: job.payment,
@@ -113,6 +128,10 @@ router.post('/', requireAuth('customer'), asyncRoute(async (req, res) => {
     customer: req.user._id, mode, category, description, area, address, preferredTime, photos,
     status: mode === 'direct' ? 'requested' : 'open',
   });
+  if (mode === 'quotes') {
+    if (!CATEGORIES.includes(category)) throw httpError(400, 'Choose a service');
+    job.expiresAt = postExpiry();
+  }
 
   if (mode === 'direct') {
     const worker = await User.findOne({ _id: workerId, role: 'worker', status: 'active' });
@@ -139,6 +158,7 @@ router.get('/mine', requireAuth('customer', 'worker'), asyncRoute(async (req, re
       area: j.area, preferredTime: j.preferredTime, updatedAt: j.updatedAt, expiresAt: j.expiresAt, completedAt: j.completedAt,
       customer: j.customer?.name, worker: j.worker?.name, total: agreementTotal(j.agreement),
       otherPhotoUrl: (iAmWorker ? j.customer : j.worker)?.photoUrl,
+      quotesCount: j.quotes.length,
       waitingForCustomer: j.agreement.some((e) => e.status === 'proposed'),
       // The worker has said how much cash they got (the last step for them).
       cashConfirmed: j.payment?.workerAmount != null,
@@ -150,16 +170,48 @@ router.get('/mine', requireAuth('customer', 'worker'), asyncRoute(async (req, re
   });
 }));
 
-// GET /api/jobs/open — posted jobs a worker can quote on (their skills, their areas).
+// GET /api/jobs/open — "Jobs near you": posted jobs for the worker's services in the
+// areas they work in, still collecting prices. No address or phone until they're picked.
 router.get('/open', requireAuth('worker'), asyncRoute(async (req, res) => {
+  await expireStale();
   const p = req.user.workerProfile;
-  const jobs = await Job.find({ status: 'open', category: { $in: p.skills }, area: { $in: p.areasServed } })
-    .sort({ createdAt: -1 }).limit(50);
+  const jobs = await Job.find({
+    status: 'open', category: { $in: p.skills || [] }, area: { $in: p.areasServed || [] }, customer: { $ne: req.user._id },
+  }).sort({ createdAt: -1 }).limit(50).populate('customer', 'name photoUrl stats');
+  const ratings = await visibleRatings(jobs.map((j) => idOf(j.customer)).filter(Boolean));
   res.json({
-    jobs: jobs.map((j) => ({
-      id: j._id, category: j.category, description: j.description, area: j.area, preferredTime: j.preferredTime,
-      alreadyQuoted: j.quotes.some((q) => q.worker.equals(req.user._id)),
-    })),
+    jobs: jobs.map((j) => {
+      const mine = j.quotes.find((q) => q.worker.equals(req.user._id));
+      return {
+        id: j._id, category: j.category, description: j.description, area: j.area, preferredTime: j.preferredTime,
+        photos: j.photos || [], createdAt: j.createdAt, expiresAt: j.expiresAt, quotesCount: j.quotes.length,
+        customer: j.customer && {
+          name: j.customer.name.split(' ')[0], photoUrl: j.customer.photoUrl,
+          rating: ratings.get(j.customer._id.toString()) || null,
+          jobsCompleted: j.customer.stats?.jobsCompleted || 0, paidOnRecord: j.customer.stats?.paidOnRecord || 0,
+        },
+        myQuote: mine ? { amount: mine.amount, note: mine.note } : null,
+        alreadyQuoted: Boolean(mine),
+      };
+    }),
+  });
+}));
+
+// GET /api/jobs/bids — the prices this worker sent, and what happened to each.
+router.get('/bids', requireAuth('worker'), asyncRoute(async (req, res) => {
+  await expireStale();
+  const jobs = await Job.find({ mode: 'quotes', 'quotes.worker': req.user._id }).sort({ updatedAt: -1 }).limit(30);
+  res.json({
+    bids: jobs.map((j) => {
+      const q = j.quotes.find((x) => x.worker.equals(req.user._id));
+      let outcome = 'waiting';
+      if (j.worker) outcome = j.worker.equals(req.user._id) ? 'won' : 'lost';
+      else if (j.status !== 'open') outcome = 'closed'; // expired or cancelled before anyone was picked
+      return {
+        id: j._id, category: j.category, description: j.description, area: j.area, preferredTime: j.preferredTime,
+        amount: q.amount, at: q.createdAt, outcome, quotesCount: j.quotes.length, expiresAt: j.expiresAt,
+      };
+    }),
   });
 }));
 
@@ -168,7 +220,7 @@ router.get('/:id', requireAuth(), asyncRoute(async (req, res) => {
   const job = await Job.findById(req.params.id)
     .populate('customer', 'name phone area badges stats photoUrl')
     .populate('worker', 'name phone area badges stats photoUrl')
-    .populate('quotes.worker', 'name badges stats');
+    .populate('quotes.worker', 'name badges stats photoUrl area workerProfile');
   if (!job) throw httpError(404, 'Job not found');
 
   const isQuotingWorker = req.user.role === 'worker' && job.status === 'open';
@@ -220,14 +272,15 @@ router.post('/:id/cancel', requireAuth('customer', 'worker'), asyncRoute(async (
 
 router.post('/:id/quotes', requireAuth('worker'), asyncRoute(async (req, res) => {
   const job = await loadJob(req.params.id);
-  requireStatus(job, 'open');
+  if (isExpired(job)) { job.status = 'expired'; await job.save(); }
+  if (job.status !== 'open') throw httpError(409, 'This job is not taking prices any more', { code: 'post_closed' });
   if (!req.user.workerProfile?.skills?.includes(job.category)) throw httpError(400, "You don't offer this service");
-  if (job.quotes.some((q) => q.worker.equals(req.user._id))) throw httpError(409, 'You already quoted on this job');
+  if (job.quotes.some((q) => q.worker.equals(req.user._id))) throw httpError(409, 'You already sent a price for this job', { code: 'already_quoted' });
 
   const amount = Number(req.body.amount);
-  if (!Number.isFinite(amount) || amount < 0) throw httpError(400, 'Enter an amount in rupees');
+  if (!Number.isFinite(amount) || amount <= 0) throw httpError(400, 'Enter an amount in rupees', { code: 'bad_price' });
 
-  job.quotes.push({ worker: req.user._id, amount, note: req.body.note });
+  job.quotes.push({ worker: req.user._id, amount, note: req.body.note?.trim().slice(0, 300) || undefined });
   await job.save();
   res.status(201).json({ quotes: job.quotes.length });
 }));
@@ -239,10 +292,16 @@ router.post('/:id/quotes/:quoteId/pick', requireAuth('customer'), asyncRoute(asy
   const quote = job.quotes.id(req.params.quoteId);
   if (!quote) throw httpError(404, 'Quote not found');
 
-  // From here a posted job follows the same path as a direct request.
+  // Picking a price is agreeing to it: it goes on the record as the full work price,
+  // so the job is "agreed" straight away. Anything extra later (parts, extra work)
+  // still needs the customer's OK, exactly like a direct request.
+  if (isExpired(job)) { job.status = 'expired'; await job.save(); throw httpError(410, 'This job stopped taking prices', { code: 'post_closed' }); }
+  const now = new Date();
   job.worker = quote.worker;
-  job.status = 'accepted';
-  job.acceptedAt = new Date();
+  job.status = 'agreed';
+  job.acceptedAt = now;
+  job.expiresAt = undefined;
+  job.agreement.push({ kind: 'quote', amount: quote.amount, scope: quote.note, status: 'accepted', proposedAt: quote.createdAt, decidedAt: now });
   await job.save();
   await User.updateOne({ _id: quote.worker }, { $inc: { 'stats.jobsAccepted': 1 } });
   res.json({ status: job.status });

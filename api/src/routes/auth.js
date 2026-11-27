@@ -12,6 +12,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Otp from '../models/Otp.js';
+import Job from '../models/Job.js';
+import { Dispute, Vouch } from '../models/others.js';
 import { config } from '../config.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 import { asyncRoute, httpError, normalisePhone, isPhotoUrl } from '../lib/http.js';
@@ -20,7 +22,7 @@ import { OTP, CHANNELS, makeCode, sendCode } from '../lib/otp.js';
 
 const router = Router();
 
-const PURPOSES = ['signup', 'reset'];
+const PURPOSES = ['signup', 'reset', 'change']; // change = moving an account to a new number
 const APPS = ['customer', 'worker'];
 
 // The number belongs to the other app's kind of account.
@@ -73,7 +75,8 @@ router.post('/otp/request', asyncRoute(async (req, res) => {
   if (!PURPOSES.includes(purpose)) throw httpError(400, 'Unknown purpose');
 
   const registered = await User.findOne({ phone }, 'role');
-  wrongApp(registered, req.body.app);
+  if (purpose === 'change' && registered) throw httpError(409, 'This number already has an account.', { code: 'number_taken' });
+  if (purpose !== 'change') wrongApp(registered, req.body.app);
   if (purpose === 'reset' && registered?.role === 'admin') throw httpError(404, 'No account with this number yet.', { code: 'not_registered' });
   if (purpose === 'signup' && registered) throw httpError(409, 'This number already has an account. Enter your PIN.', { code: 'already_registered' });
   if (purpose === 'reset' && !registered) throw httpError(404, 'No account with this number yet.', { code: 'not_registered' });
@@ -218,6 +221,7 @@ router.post('/login', asyncRoute(async (req, res) => {
     throw httpError(401, 'Wrong number or PIN', { code: 'pin_wrong' });
   }
   if (user.status === 'banned') throw httpError(403, 'This account is banned', { code: 'banned' });
+  if (user.status === 'closed') throw httpError(403, 'This account was closed', { code: 'account_closed' });
 
   if (user.failedLogins || user.lockedUntil) {
     user.failedLogins = 0;
@@ -243,9 +247,72 @@ router.post('/pin/reset', asyncRoute(async (req, res) => {
   res.json(loginReply(user));
 }));
 
+// ---------- settings: change PIN, change number, close account ----------
+
+// Checks the current PIN for a logged-in person (same lock rules as logging in).
+async function checkPin(userId, pin) {
+  const user = await User.findById(userId).select('+passwordHash');
+  const minutes = lockMinutesLeft(user);
+  if (minutes) throw httpError(423, `Too many wrong tries. Try again in ${minutes} minutes.`, { code: 'pin_locked', minutes });
+  if (!(await bcrypt.compare(String(pin ?? ''), user.passwordHash))) {
+    const result = recordWrongPin(user);
+    await user.save();
+    if (result.locked) throw httpError(423, `Too many wrong tries. Try again in ${result.minutes} minutes.`, { code: 'pin_locked', minutes: result.minutes });
+    throw httpError(401, 'Wrong PIN', { code: 'pin_wrong', triesLeft: result.triesLeft });
+  }
+  if (user.failedLogins) { user.failedLogins = 0; await user.save(); }
+  return user;
+}
+
+// POST /api/auth/pin/change { pin, newPin } — knows the old PIN, wants a new one.
+router.post('/pin/change', requireAuth('customer', 'worker'), asyncRoute(async (req, res) => {
+  if (!isValidPin(req.body.newPin)) throw httpError(400, 'Choose 4 numbers for your PIN', { code: 'bad_pin' });
+  const user = await checkPin(req.user._id, req.body.pin);
+  user.passwordHash = await bcrypt.hash(req.body.newPin, 10);
+  await user.save();
+  res.json({ ok: true });
+}));
+
+// POST /api/auth/phone/change { ticket } — after a code sent to the NEW number was verified
+// (otp/request + otp/verify with purpose "change").
+router.post('/phone/change', requireAuth('customer', 'worker'), asyncRoute(async (req, res) => {
+  const phone = readTicket(req.body.ticket, 'change');
+  if (await User.exists({ phone })) throw httpError(409, 'This number already has an account.', { code: 'number_taken' });
+  req.user.phone = phone;
+  await req.user.save();
+  res.json({ phone });
+}));
+
+// POST /api/auth/close { pin } — close my own account.
+// Jobs stay on the record (disputes are judged against it); the person can no
+// longer log in, workers stop showing in search, waiting requests are cancelled.
+router.post('/close', requireAuth('customer', 'worker'), asyncRoute(async (req, res) => {
+  await checkPin(req.user._id, req.body.pin);
+  const me = req.user._id;
+  const side = req.user.role === 'worker' ? 'worker' : 'customer';
+  if (await Job.exists({ [side]: me, status: { $in: ['accepted', 'agreed'] } })) {
+    throw httpError(409, 'Finish or cancel your jobs first', { code: 'active_jobs' });
+  }
+  if (await Dispute.exists({ status: 'open', $or: [{ openedBy: me }, { against: me }] })) {
+    throw httpError(409, 'Wait until Mohalla decides your open problem report', { code: 'open_dispute' });
+  }
+
+  if (side === 'customer') {
+    await Job.updateMany({ customer: me, status: { $in: ['requested', 'open'] } }, { status: 'cancelled', cancelledBy: me });
+  } else {
+    await Job.updateMany({ worker: me, status: 'requested' }, { status: 'declined' });
+    await Vouch.updateMany({ from: me, active: true }, { active: false });
+    req.user.workerProfile.availableToday = false;
+  }
+  req.user.status = 'closed';
+  req.user.closedAt = new Date();
+  await req.user.save();
+  res.json({ ok: true });
+}));
+
 // GET /auth/me — who am I? The apps call this on start-up.
 router.get('/me', requireAuth(), (req, res) => {
-  res.json({ user: { ...req.user.toPublic(), phone: req.user.phone, language: req.user.language, strikes: req.user.strikes.length, assistedBy: req.user.assistedBy?.name ? { name: req.user.assistedBy.name, relation: req.user.assistedBy.relation } : undefined } });
+  res.json({ user: { ...req.user.toPublic(), phone: req.user.phone, address: req.user.address, language: req.user.language, strikes: req.user.strikes.length, assistedBy: req.user.assistedBy?.name ? { name: req.user.assistedBy.name, relation: req.user.assistedBy.relation } : undefined } });
 });
 
 export default router;

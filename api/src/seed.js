@@ -104,6 +104,20 @@ await Job.create({
 });
 await User.updateOne({ _id: rashid._id }, { $inc: { 'stats.jobsAccepted': 3 } });
 
+// Posted jobs ("let workers send prices"): one waiting for Rashid's price in "Jobs near you",
+// and one for Sana that already has a price from Imran to pick.
+await Job.create({
+  customer: khadija._id, mode: 'quotes', category: 'electrician', status: 'open', expiresAt: hoursFromNow(20),
+  description: 'Light or switch. Two lights in the kitchen do not turn on.', area: 'pechs', address: 'House 88, Block 2',
+  preferredTime: today(16),
+});
+await Job.create({
+  customer: sana._id, mode: 'quotes', category: 'plumber', status: 'open', expiresAt: hoursFromNow(18),
+  description: 'Tap leaking. The kitchen tap drips all night.', area: 'gulshan-e-iqbal', address: 'House 12, Block 5, near the green mosque',
+  preferredTime: today(10),
+  quotes: [{ worker: imran._id, amount: 1200, note: 'New washer and tap check included' }],
+});
+
 console.log(`Seeded. Customers and workers log in with PIN ${PIN}; admin with password "${PASSWORD}".`);
 console.log('Admin:     03000000000');
 console.log('Customers: 03001111111 (Sana), 03002222222 (Bilal), 03003333333 (Khadija)');

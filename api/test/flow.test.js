@@ -213,3 +213,68 @@ test('experienced workers vouch for others by phone number', opts, async () => {
   assert.equal(sum.vouch.left, 2);
   assert.deepEqual(sum.vouch.people.map((p) => p.name), ['Other']);
 });
+
+test('posted jobs: workers nearby send prices, the customer picks one', opts, async () => {
+  const c = await call('POST', '/auth/login', null, { phone: '03001111111', pin: '4321' });
+  const w = await call('POST', '/auth/login', null, { phone: '03111111111', pin: '2580' });
+  const other = await call('POST', '/auth/login', null, { phone: '03119999999', pin: '1111' });
+  const { job } = await call('POST', '/jobs', c.token, {
+    mode: 'quotes', category: 'electrician', description: 'Light or switch', area: 'pechs', address: 'House 9',
+  });
+  const near = await call('GET', '/jobs/open', w.token);
+  const seen = near.jobs.find((j) => j.id === job.id);
+  assert.ok(seen && !seen.alreadyQuoted);
+  const asWorker = await call('GET', `/jobs/${job.id}`, w.token);
+  assert.equal(asWorker.job.address, undefined); // no address until picked
+  await call('POST', `/jobs/${job.id}/quotes`, w.token, { amount: 0 }, 400);
+  await call('POST', `/jobs/${job.id}/quotes`, w.token, { amount: 1500, note: 'Includes a new switch' });
+  await call('POST', `/jobs/${job.id}/quotes`, w.token, { amount: 1400 }, 409); // one price each
+  await call('POST', `/jobs/${job.id}/quotes`, other.token, { amount: 1300 });
+
+  const view = await call('GET', `/jobs/${job.id}`, c.token);
+  assert.equal(view.job.quotes.length, 2);
+  assert.equal(view.job.quotes[0].worker.phone, undefined); // no numbers before picking
+  const pick = view.job.quotes.find((q) => q.amount === 1500);
+  const res = await call('POST', `/jobs/${job.id}/quotes/${pick.id}/pick`, c.token);
+  assert.equal(res.status, 'agreed');
+  const after = await call('GET', `/jobs/${job.id}`, w.token);
+  assert.equal(after.job.total, 1500);
+  assert.equal(after.job.address, 'House 9');
+  const otherBids = await call('GET', '/jobs/bids', other.token);
+  assert.equal(otherBids.bids.find((b) => b.id === job.id).outcome, 'lost');
+  const myBids = await call('GET', '/jobs/bids', w.token);
+  assert.equal(myBids.bids.find((b) => b.id === job.id).outcome, 'won');
+});
+
+test('settings: change PIN, change number, save details, close account', opts, async () => {
+  const c = await call('POST', '/auth/login', null, { phone: '03004444444', pin: '1357' });
+  await call('POST', '/auth/pin/change', c.token, { pin: '0000', newPin: '9999' }, 401);
+  await call('POST', '/auth/pin/change', c.token, { pin: '1357', newPin: '9999' });
+  await call('POST', '/auth/login', null, { phone: '03004444444', pin: '9999' });
+
+  const saved = await call('PATCH', '/users/me', c.token, { name: 'Ayesha K', area: 'dha', address: 'Flat 2, Street 1' });
+  assert.equal(saved.user.address, 'Flat 2, Street 1');
+
+  // moving to a new number: the code goes to the new number, which must be free
+  await call('POST', '/auth/otp/request', null, { phone: '03001111111', channel: 'sms', purpose: 'change' }, 409);
+  const sent = await call('POST', '/auth/otp/request', null, { phone: '03005555555', channel: 'sms', purpose: 'change' });
+  const { ticket } = await call('POST', '/auth/otp/verify', null, { phone: '03005555555', purpose: 'change', code: sent.demoCode });
+  const moved = await call('POST', '/auth/phone/change', c.token, { ticket });
+  assert.equal(moved.phone, '03005555555');
+  await call('POST', '/auth/login', null, { phone: '03005555555', pin: '9999' });
+
+  await call('POST', '/auth/close', c.token, { pin: '1111' }, 401);
+  await call('POST', '/auth/close', c.token, { pin: '9999' });
+  const closed = await call('POST', '/auth/login', null, { phone: '03005555555', pin: '9999' }, 403);
+  assert.equal(closed.code, 'account_closed');
+  await call('GET', '/auth/me', c.token, null, 403);
+});
+
+test("you can't close an account in the middle of a job", opts, async () => {
+  const c = await call('POST', '/auth/login', null, { phone: '03001111111', pin: '4321' });
+  const w = await call('POST', '/auth/login', null, { phone: '03111111111', pin: '2580' });
+  const { job } = await call('POST', '/jobs', c.token, { workerId: w.user.id, category: 'electrician', description: 'Fan', area: 'pechs', address: 'House 1' });
+  await call('POST', `/jobs/${job.id}/accept`, w.token);
+  const blocked = await call('POST', '/auth/close', w.token, { pin: '2580' }, 409);
+  assert.equal(blocked.code, 'active_jobs');
+});

@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import { C, F, R } from './theme';
 import { Ico, Tap } from './motion';
-import { CaretLeft, ClipboardText, Money, Lifebuoy, Backspace, Star, Warning } from './icons';
+import { CaretLeft, ClipboardText, Money, MapPin, UserCircle, Backspace, Star, Warning } from './icons';
 import { useLang } from '../lib/i18n';
 import { errorText, initials, photoUri } from '../lib/api';
 
@@ -223,13 +223,14 @@ export function Scallops() {
   );
 }
 
-// The dark bar at the bottom of the three main screens.
+// The dark bar at the bottom of the four main screens. `badges` shows a red count on a tab.
 const TABS = [
   { href: '/home', k: 'navJobs', icon: ClipboardText, motion: 'wiggle' },
+  { href: '/near', k: 'navNear', icon: MapPin, motion: 'roll' },
   { href: '/earnings', k: 'navEarnings', icon: Money, motion: 'roll' },
-  { href: '/help', k: 'navHelp', icon: Lifebuoy, motion: 'spin' },
+  { href: '/me', k: 'navMe', icon: UserCircle, motion: 'wiggle' },
 ];
-export function BottomNav({ active, badge = 0 }) {
+export function BottomNav({ active, badges = {} }) {
   const { t, u } = useLang();
   const insets = useSafeAreaInsets();
   return (
@@ -241,9 +242,9 @@ export function BottomNav({ active, badge = 0 }) {
             <View style={{ alignItems: 'center', paddingVertical: 4 }}>
               <View>
                 <Ico icon={tab.icon} motion={tab.motion} size={24} box={34} colors={['transparent', on ? 'rgba(242,165,49,0.55)' : 'rgba(242,165,49,0.35)', on ? C.saffron : '#f3e6d3']} />
-                {tab.href === '/home' && badge > 0 && (
+                {badges[tab.href] > 0 && (
                   <View style={{ position: 'absolute', right: -10, top: -2, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.chilli, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 }}>
-                    <Text style={{ color: '#fff', fontFamily: F.heavy, fontSize: 13 }}>{badge}</Text>
+                    <Text style={{ color: '#fff', fontFamily: F.heavy, fontSize: 13 }}>{badges[tab.href]}</Text>
                   </View>
                 )}
               </View>

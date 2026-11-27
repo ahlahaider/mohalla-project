@@ -1,8 +1,8 @@
-// Help: how Mohalla works for workers, the fair rules, the language switch and the help line.
+// Help: how Mohalla works for workers, the fair rules and the help line. Opened from Me.
 import { View, Linking } from 'react-native';
-import { Screen, BottomNav, Say, L, P, Btn, Card, Chip, row } from '../ui/kit';
+import { Screen, TopBar, Say, L, P, Btn, Card, row } from '../ui/kit';
 import { Ico } from '../ui/motion';
-import { Bell, Hourglass, Receipt, Money, HandCoins, Star, ShieldCheck, Phone, Translate } from '../ui/icons';
+import { Bell, Hourglass, Receipt, Money, HandCoins, Star, ShieldCheck, Phone } from '../ui/icons';
 import { useLang } from '../lib/i18n';
 import { C } from '../ui/theme';
 
@@ -10,7 +10,7 @@ import { C } from '../ui/theme';
 const HELP_PHONE = '';
 
 export default function Help() {
-  const { t, u, lang, setLang } = useLang();
+  const { t, u } = useLang();
   const how = [
     ['hw1', Bell, 'saffron', 'ring'],
     ['hw2', Hourglass, 'henna', 'spin'],
@@ -20,8 +20,7 @@ export default function Help() {
   const rules = [['rule1', HandCoins, 'leaf'], ['rule2', Star, 'saffron'], ['rule3', ShieldCheck, 'henna']];
   return (
     <Screen
-      nav={<BottomNav active="/help" />}
-      top={<View style={{ paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}><L k="navHelp" size={26} weight="heavy" /></View>}
+      top={<TopBar title={t('navHelp')} ur={u('navHelp')} />}
     >
       <Card>
         <View style={{ gap: 14 }}>
@@ -44,19 +43,6 @@ export default function Help() {
               <P color={C.ink} weight="semi" style={{ flex: 1 }}>{t(k)}</P>
             </View>
           ))}
-        </View>
-      </Card>
-
-      <Card>
-        <View style={{ gap: 12 }}>
-          <View style={row.center}>
-            <Ico icon={Translate} tone="ink" size={22} box={40} />
-            <L k="language" size={18} weight="heavy" />
-          </View>
-          <View style={row.wrap}>
-            <Chip main="English" selected={lang === 'en'} onPress={() => setLang('en')} />
-            <Chip main="Roman Urdu" selected={lang === 'roman-ur'} onPress={() => setLang('roman-ur')} />
-          </View>
         </View>
       </Card>
 

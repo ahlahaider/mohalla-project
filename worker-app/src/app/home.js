@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { Screen, Awning, BottomNav, Say, L, P, Btn, Card, Tag, Avatar, Ring, Toggle, Loading, ErrorBox, RiseIn, Note, row } from '../ui/kit';
 import { Ico, Tap } from '../ui/motion';
 import { CATEGORY } from '../ui/icons';
-import { Bell, ClipboardText } from '../ui/icons';
+import { Bell, ClipboardText, MapPin, CaretRight } from '../ui/icons';
 import { api, rupees, firstName } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useLang } from '../lib/i18n';
@@ -25,6 +25,7 @@ export default function Home() {
   const { t, u, areaName } = l;
   const { user, setUser } = useAuth();
   const [jobs, setJobs] = useState(null);
+  const [nearCount, setNearCount] = useState(0); // posted jobs near me I haven't sent a price for
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -32,7 +33,8 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const res = await api('/jobs/mine');
+      const [res, near] = await Promise.all([api('/jobs/mine'), api('/jobs/open').catch(() => ({ jobs: [] }))]);
+      setNearCount(near.jobs.filter((j) => !j.alreadyQuoted).length);
       const ids = res.jobs.filter(isNewRequest).map((j) => j.id);
       if (known.current && ids.some((id) => !known.current.has(id)) && Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -68,11 +70,11 @@ export default function Home() {
     <Screen
       topColor={C.henna}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.henna} />}
-      nav={<BottomNav active="/home" badge={requests.length} />}
+      nav={<BottomNav active="/home" badges={{ '/home': requests.length, '/near': nearCount }} />}
       top={(
         <Awning>
           <View style={row.center}>
-            <Tap onPress={() => router.push('/profile')} face="transparent" edge="transparent" depth={0} radius={30} accessibilityLabel={t('profileTitle')}>
+            <Tap onPress={() => router.replace('/me')} face="transparent" edge="transparent" depth={0} radius={30} accessibilityLabel={t('meTitle')}>
               <View style={{ borderWidth: 3, borderColor: C.saffron, borderRadius: 32 }}>
                 <Avatar name={user?.name} photoUrl={user?.photoUrl} size={54} tone="#f7d9a8" />
               </View>
@@ -112,6 +114,17 @@ export default function Home() {
             </Note>
           )}
           {requests.map((j, i) => <RequestCard key={j.id} job={j} i={i} l={l} />)}
+
+          {/* posted jobs near me, waiting for my price */}
+          {nearCount > 0 && (
+            <Tap onPress={() => router.replace('/near')} face={C.leafTint} edge={C.leaf} border={C.leaf} radius={R.lg}>
+              <View style={[row.center, { padding: 14 }]}>
+                <Ico icon={MapPin} tone="leaf" motion="roll" size={26} box={46} play />
+                <Say main={t(nearCount === 1 ? 'nearTeaser1' : 'nearTeaser', { n: nearCount })} ur={u(nearCount === 1 ? 'nearTeaser1' : 'nearTeaser', { n: nearCount })} size={17} weight="heavy" color={C.leafDeep} style={{ flex: 1 }} />
+                <CaretRight size={22} weight="bold" color={C.leafDeep} />
+              </View>
+            </Tap>
+          )}
 
           {/* jobs going on */}
           <L k="myJobs" size={20} weight="heavy" style={{ marginTop: 4 }} />

@@ -94,7 +94,7 @@ cp .env.example .env        # then paste your connection string into MONGO_URI
 npm run seed                # fills the database with demo users and jobs (wipes it first!)
 npm run dev                 # starts the API on http://localhost:4000, restarts when you save
 ```
-`npm run seed` prints the demo logins:
+`npm run seed` fills the database with demo data for every screen: 56 workers covering every service in every area, 15 customers, and jobs in every state. **[DEMO-DATA.md](DEMO-DATA.md) lists every account and what to try with each.** Everyone uses PIN `1234`. A few to start with:
 - Customers (website, number + PIN `1234`): `03001111111` (Sana), `03002222222` (Bilal), `03003333333` (Khadija)
 - Workers (worker app, number + PIN `1234`): `03111111111` (Rashid, electrician: has a new request waiting), `03112222222` (Imran, plumber), `03113333333` (Shabana, cleaner)
 - Admin (website at `/admin/login`, password `password123`): `03000000000`

@@ -39,6 +39,8 @@ export function AuthProvider({ children }) {
       post('/auth/register', { role: 'customer', ticket, name, pin, area: area || undefined, language }).then(startSession),
     // after a "forgot PIN" code was checked
     resetPin: ({ ticket, pin }) => post('/auth/pin/reset', { ticket, pin, app: 'customer' }).then(startSession),
+    // after saving settings: merge the new details into the logged-in user
+    updateUser: (changes) => setUser((u) => ({ ...u, ...changes })),
     logout: () => {
       setToken(null);
       setUser(null);

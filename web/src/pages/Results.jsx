@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
-  Sun, GenderFemale, Tag, Star, ShieldCheck, Storefront, Handshake, Sparkle, CaretRight, MapPin, MagnifyingGlass,
+  Sun, GenderFemale, Tag, Star, ShieldCheck, Storefront, Handshake, Sparkle, CaretRight, MapPin, MagnifyingGlass, Megaphone,
 } from '@phosphor-icons/react';
 import { api, errorText, rupees } from '../api.js';
 import { useLang } from '../i18n.jsx';
@@ -104,6 +104,18 @@ export default function Results() {
         )}
 
         {shown?.map((w, i) => <WorkerCard key={w.id} worker={w} category={category} i={i} />)}
+
+        {/* Or let workers come to you: post the job, nearby workers send prices. */}
+        {shown && (
+          <Link to={`/find/${category}/post`} className="door moves" style={{ boxShadow: '0 0 0 2px var(--leaf), 0 5px 0 2px var(--leaf)', background: 'var(--leaf-tint)' }}>
+            <Ico icon={Megaphone} tone="leaf" size={30} box={56} motion="wiggle" />
+            <span className="door-text">
+              <Say k="postCardTitle" className="door-title" />
+              <span className="door-hint" style={{ color: 'var(--leaf-deep)' }}>{t('postCardHint')}</span>
+            </span>
+            <CaretRight size={24} weight="bold" />
+          </Link>
+        )}
       </main>
 
       <AreaSheet open={picking} current={area} onClose={() => setPicking(false)} onPick={(a) => { setArea(a); setPicking(false); }} />

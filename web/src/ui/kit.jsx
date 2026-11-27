@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  CaretLeft, HouseLine, ClipboardText, Lifebuoy, CircleNotch, WarningCircle,
+  CaretLeft, HouseLine, ClipboardText, UserCircle, CircleNotch, WarningCircle,
   Backspace, Star, MapPin, Camera, X,
 } from '@phosphor-icons/react';
 import { useLang, AREA_KEYS } from '../i18n.jsx';
@@ -72,7 +72,7 @@ export function BottomNav({ waiting = 0 }) {
   const items = [
     { to: '/', k: 'navHome', icon: HouseLine, end: true },
     { to: '/jobs', k: 'navJobs', icon: ClipboardText },
-    { to: '/help', k: 'navHelp', icon: Lifebuoy },
+    { to: '/me', k: 'navMe', icon: UserCircle },
   ];
   return (
     <nav className="bottom-nav">

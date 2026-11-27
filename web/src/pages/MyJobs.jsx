@@ -2,9 +2,8 @@
 // A red "Needs your OK" tag shows where the customer has to answer a price.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardText, MagnifyingGlass, SignOut } from '@phosphor-icons/react';
-import { api, errorText, rupees, prettyPhone } from '../api.js';
-import { useAuth } from '../auth.jsx';
+import { ClipboardText, MagnifyingGlass } from '@phosphor-icons/react';
+import { api, errorText, rupees } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { firstName } from '../prefs.js';
 import { CATEGORY } from '../ui/icons.js';
@@ -16,7 +15,6 @@ const MOVING = ['open', 'requested', 'accepted', 'agreed'];
 export default function MyJobs() {
   const L = useLang();
   const { t } = L;
-  const { user, logout } = useAuth();
   const [jobs, setJobs] = useState(null);
   const [error, setError] = useState(null);
 
@@ -49,17 +47,6 @@ export default function MyJobs() {
         {now.length > 0 && <List label={t('jobsNow')} jobs={now} />}
         {before.length > 0 && <List label={t('jobsBefore')} jobs={before} />}
 
-        {user && (
-          <div className="box row spread" style={{ marginTop: 32 }}>
-            <span className="small" style={{ fontWeight: 700 }}>
-              {t('loggedInAs', { name: user.name })}<br />
-              <span className="muted">{prettyPhone(user.phone)}</span>
-            </span>
-            <button type="button" className="btn btn--ghost btn--small" style={{ width: 'auto' }} onClick={logout}>
-              <SignOut size={22} weight="bold" />{t('logout')}
-            </button>
-          </div>
-        )}
       </main>
       <BottomNav waiting={waiting} />
     </>
@@ -83,7 +70,7 @@ function List({ label, jobs }) {
               <div className="muted">{[name, cat(j.category), whenText(j.preferredTime, t)].filter(Boolean).join(' · ')}</div>
             </div>
             <div className="side">
-              {j.needsMe ? <span className="tag chilli">{t('needsYou')}</span> : <span className={`tag ${st.tone}`}>{t(st.k, { name })}</span>}
+              {j.needsMe ? <span className="tag chilli">{j.status === 'open' ? t(j.quotesCount === 1 ? 'price1' : 'pricesN', { n: j.quotesCount }) : t('needsYou')}</span> : <span className={`tag ${st.tone}`}>{t(st.k, { name })}</span>}
               {j.total > 0 && <b>{rupees(j.total)}</b>}
             </div>
           </Link>
